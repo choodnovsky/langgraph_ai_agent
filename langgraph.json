@@ -6,7 +6,7 @@
     "router": "./router.py:graph",
     "tools": "./tools.py:graph",
     "agent": "./agent.py:app",
-    "main": "./main.py:app_graph"
+    "main": "./main.py:graph"
   },
   "env": "./.env"
 }
