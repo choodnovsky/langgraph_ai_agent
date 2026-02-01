@@ -4,9 +4,9 @@
   ],
   "graphs": {
     "router": "./router.py:graph",
-    "tools": "./tools.py:graph",
     "agent": "./agent.py:app",
-    "main": "./main.py:graph"
+    "main": "./main.py:graph",
+    "app": "./app.py:graph"
   },
   "env": "./.env"
 }
