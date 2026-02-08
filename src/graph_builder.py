@@ -1,5 +1,4 @@
 # src/graph_builder.py
-import streamlit as st
 from langgraph.graph import MessagesState, StateGraph, START
 from langgraph.prebuilt import ToolNode, tools_condition
 from langchain_openai import ChatOpenAI
@@ -8,14 +7,13 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from src.settings import settings
 from src.tools import TOOLS
 
-@st.cache_resource
 def build_graph():
     llm = ChatOpenAI(
-        model="z-ai/glm-4.5-air:free",
+        model=settings.OPENAI_MODEL,
         api_key=settings.OPENAI_API_KEY,
         temperature=0.1,
         max_retries=2,
-        base_url="https://openrouter.ai/api/v1",
+        base_url=settings.BASE_URL,
     )
 
     llm_with_tools = llm.bind_tools(TOOLS)

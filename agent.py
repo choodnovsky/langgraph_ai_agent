@@ -77,4 +77,4 @@ builder.add_conditional_edges(
 )
 builder.add_edge("tools", "assistant")  # Ключевое ребро цикла
 
-app = builder.compile()
+graph = builder.compile()

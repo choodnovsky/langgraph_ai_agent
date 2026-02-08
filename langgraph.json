@@ -3,10 +3,8 @@
     "./requirements.txt"
   ],
   "graphs": {
-    "router": "./router.py:graph",
-    "agent": "./agent.py:app",
-    "main": "./main.py:graph",
-    "app": "./app.py:graph"
+    "app": "./app.py:graph",
+    "agent": "./agent.py:graph"
   },
   "env": "./.env"
 }

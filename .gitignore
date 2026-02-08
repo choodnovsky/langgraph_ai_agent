@@ -3,3 +3,6 @@
 .idea/
 .langgraph_api/
 __pycache__/
+chroma_data
+embeddings/cache_1
+.jbeval/

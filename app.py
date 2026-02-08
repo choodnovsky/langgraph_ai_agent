@@ -5,6 +5,7 @@ from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
 
 from src.graph_builder import build_graph
 
+
 # =============================
 # STREAM HELPERS
 # =============================
@@ -20,7 +21,12 @@ def stream_text(text: str, delay: float = 0.02):
 st.set_page_config(page_title="ИИ агент", layout="centered")
 st.title("🤖 ИИ агент")
 
-graph = build_graph()
+
+@st.cache_resource
+def get_graph():
+    return build_graph()
+
+graph = get_graph()
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
