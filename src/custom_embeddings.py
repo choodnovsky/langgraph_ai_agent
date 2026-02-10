@@ -1,13 +1,15 @@
-# custom_embeddings.py
+# src/custom_embeddings.py
 
 import torch
 import torch.nn as nn
 from langchain_huggingface import HuggingFaceEmbeddings
+from langchain.embeddings.base import Embeddings
+from typing import List
 
 from src.settings import settings
 
 
-class CustomEmbeddings:
+class CustomEmbeddings(Embeddings):
     """
     Embeddings wrapper:
     - модель берётся из settings.EMBEDDINGS_MODEL
@@ -54,12 +56,16 @@ class CustomEmbeddings:
         out = out / (out.norm(dim=1, keepdim=True) + 1e-8)
         return out.detach().cpu().numpy()
 
-    def embed_documents(self, texts):
+    def embed_documents(self, texts: List[str]) -> List[List[float]]:
+        """Эмбеддинг списка документов"""
         base = self.base_embeddings.embed_documents(texts)
         base = torch.tensor(base, dtype=torch.float32)
-        return self._project_and_normalize(base)
+        result = self._project_and_normalize(base)
+        return result.tolist()  # Возвращаем list[list[float]]
 
-    def embed_query(self, text):
+    def embed_query(self, text: str) -> List[float]:
+        """Эмбеддинг одного запроса"""
         base = self.base_embeddings.embed_query(text)
         base = torch.tensor(base, dtype=torch.float32).unsqueeze(0)
-        return self._project_and_normalize(base)[0]
+        result = self._project_and_normalize(base)[0]
+        return result.tolist()  # Возвращаем list[float]

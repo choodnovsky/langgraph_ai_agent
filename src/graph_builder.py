@@ -1,43 +1,39 @@
-# src/graph_builder.py
-from langgraph.graph import MessagesState, StateGraph, START
+from langgraph.graph import StateGraph, START, END, MessagesState
 from langgraph.prebuilt import ToolNode, tools_condition
-from langchain_openai import ChatOpenAI
-from langchain_core.messages import HumanMessage, SystemMessage
 
-from src.settings import settings
-from src.tools import TOOLS
+from src.components.generate_query import generate_query_or_respond
+from src.components.generate_answer import generate_answer
+from src.components.grade_documents import grade_documents
+from src.components.rewrite_question import rewrite_question
+from src.components.retriever_tool import retriever_tool
 
 def build_graph():
-    llm = ChatOpenAI(
-        model=settings.OPENAI_MODEL,
-        api_key=settings.OPENAI_API_KEY,
-        temperature=0.1,
-        max_retries=2,
-        base_url=settings.BASE_URL,
+    workflow = StateGraph(MessagesState)
+
+    # Узлы
+    workflow.add_node("generate_query_or_respond", generate_query_or_respond)
+    workflow.add_node("retrieve", ToolNode([retriever_tool]))
+    workflow.add_node("rewrite_question", rewrite_question)
+    workflow.add_node("generate_answer", generate_answer)
+
+    # Рёбра
+    workflow.add_edge(START, "generate_query_or_respond")
+
+    # Решаем, нужно ли извлекать документы
+    workflow.add_conditional_edges(
+        "generate_query_or_respond",
+        tools_condition,
+        {"tools": "retrieve", END: END},
     )
 
-    llm_with_tools = llm.bind_tools(TOOLS)
-
-    system = SystemMessage(
-        content=(
-            "Ты арифметический помощник.\n"
-            "Ты ОБЯЗАН помнить предыдущие результаты.\n"
-            "Если требуется вычисление — всегда вызывай инструмент."
-        )
+    # После retrieval — оцениваем документы и решаем, что делать
+    workflow.add_conditional_edges(
+        "retrieve",
+        grade_documents,
+        {"generate_answer": "generate_answer", "rewrite_question": "rewrite_question"},
     )
 
-    def assistant(state: MessagesState):
-        response = llm_with_tools.invoke([system] + state["messages"])
-        return {"messages": [response]}
+    workflow.add_edge("generate_answer", END)
+    workflow.add_edge("rewrite_question", "generate_query_or_respond")
 
-    tool_node = ToolNode(TOOLS)
-
-    graph = StateGraph(MessagesState)
-    graph.add_node("assistant", assistant)
-    graph.add_node("tools", tool_node)
-
-    graph.add_edge(START, "assistant")
-    graph.add_conditional_edges("assistant", tools_condition)
-    graph.add_edge("tools", "assistant")
-
-    return graph.compile()
+    return workflow.compile()
