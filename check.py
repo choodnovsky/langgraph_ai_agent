@@ -1,11 +1,12 @@
-import asyncio
-from langgraph_sdk import get_client
+import requests
+CHROMA_HOST = "localhost"  # или имя сервиса Docker
+CHROMA_PORT = 8000
 
-client = get_client(url="http://127.0.0.1:2024")
-
-async def main():
-    assistants = await client.assistants.search()
-    for a in assistants:
-        print(a["graph_id"], a["assistant_id"])
-
-asyncio.run(main())
+try:
+    r = requests.get(f"http://{CHROMA_HOST}:{CHROMA_PORT}/health")
+    if r.status_code == 200 and r.json().get("ok"):
+        print("ChromaDB доступна")
+    else:
+        print("ChromaDB недоступна")
+except Exception as e:
+    print("Ошибка подключения к ChromaDB:", e)

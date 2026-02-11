@@ -1,38 +1,37 @@
-import os
 from langchain.tools import tool
-from langchain_community.vectorstores import Chroma
-from chromadb import HttpClient
+from langchain_core.vectorstores import InMemoryVectorStore
+from langchain_openai import OpenAIEmbeddings
+from langchain_community.embeddings import HuggingFaceEmbeddings
 
-from src.custom_embeddings import CustomEmbeddings
 
-CHROMA_HOST = os.getenv("CHROMA_HOST", "localhost")
-CHROMA_PORT = int(os.getenv("CHROMA_PORT", 8000))
-COLLECTION_NAME = "wiki_docs"
+from src.components.process_documents import doc_splits
+from src.settings import settings
 
-# Подключение к ChromaDB
-client = HttpClient(host=CHROMA_HOST, port=CHROMA_PORT)
-
-# Embeddings
-embeddings = CustomEmbeddings()
-
-# VectorStore
-vectorstore = Chroma(
-    client=client,
-    collection_name=COLLECTION_NAME,
-    embedding_function=embeddings
+# Бесплатные локальные эмбеддинги
+embeddings = HuggingFaceEmbeddings(
+    model_name="sentence-transformers/all-MiniLM-L6-v2"
 )
+vectorstore = InMemoryVectorStore.from_documents(
+    documents=doc_splits,
+    embedding=embeddings
+)
+
+# vectorstore = InMemoryVectorStore.from_documents(
+#     documents=doc_splits,
+#     embedding=OpenAIEmbeddings(api_key=settings.OPENAI_API_KEY, base_url='https://api.proxyapi.ru/openai/v1')
+# )
+retriever = vectorstore.as_retriever(search_kwargs={"k": 5})
 
 
 @tool
-def retriever_tool(query: str) -> str:
-    """Поиск по wiki (ChromaDB в Docker или локально)."""
-    try:
-        docs = vectorstore.similarity_search(query, k=5)
+def retrieve_blog_posts(query: str) -> str:
+    """Поиск и получение информации из блогов Лилиан Венг. Запрос должен быть на английском языке."""
+    docs = retriever.invoke(query)
+    return "\n\n".join([doc.page_content for doc in docs])
 
-        if not docs:
-            return "Документы не найдены."
 
-        return "\n\n".join([doc.page_content for doc in docs])
+retriever_tool = retrieve_blog_posts
 
-    except Exception as e:
-        return f"Ошибка при поиске: {str(e)}"
+if __name__ == "__main__":
+    result = retriever_tool.invoke({"query": "types of reward hacking"})
+    print(result)

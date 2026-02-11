@@ -1,5 +1,3 @@
-# src/custom_embeddings.py
-
 import torch
 import torch.nn as nn
 from langchain_huggingface import HuggingFaceEmbeddings
@@ -11,11 +9,11 @@ from src.settings import settings
 
 class CustomEmbeddings(Embeddings):
     """
-    Embeddings wrapper:
-    - модель берётся из settings.EMBEDDINGS_MODEL
-    - base_dim определяется автоматически
-    - target_dim принудительно (OpenAI-compatible)
-    - L2-нормализация
+    Обёртка для эмбеддингов:
+    - модель задаётся в settings.EMBEDDINGS_MODEL
+    - базовая размерность определяется автоматически
+    - target_dim — размерность проекции (например, OpenAI-compatible 1536)
+    - нормализация L2
     """
 
     def __init__(
@@ -26,7 +24,7 @@ class CustomEmbeddings(Embeddings):
         self.device = device
         self.target_dim = target_dim
 
-        # 1️⃣ Базовая модель из settings
+        # 1️⃣ Базовая модель HuggingFace
         self.base_embeddings = HuggingFaceEmbeddings(
             model_name=settings.EMBEDDINGS_MODEL
         )
@@ -41,16 +39,20 @@ class CustomEmbeddings(Embeddings):
 
     def _init_projection(self):
         """
-        Identity + zero padding
+        Identity + zero padding для корректной проекции меньшей размерности
         """
         with torch.no_grad():
             self.proj.weight.zero_()
             self.proj.bias.zero_()
 
             dim = min(self.base_dim, self.target_dim)
+            # ставим единичную матрицу для первых dim элементов
             self.proj.weight[:dim, :dim] = torch.eye(dim)
 
     def _project_and_normalize(self, vecs: torch.Tensor):
+        """
+        Применяет линейную проекцию и L2-нормализацию
+        """
         vecs = vecs.to(self.device)
         out = self.proj(vecs)
         out = out / (out.norm(dim=1, keepdim=True) + 1e-8)
@@ -61,11 +63,11 @@ class CustomEmbeddings(Embeddings):
         base = self.base_embeddings.embed_documents(texts)
         base = torch.tensor(base, dtype=torch.float32)
         result = self._project_and_normalize(base)
-        return result.tolist()  # Возвращаем list[list[float]]
+        return result.tolist()  # list[list[float]]
 
     def embed_query(self, text: str) -> List[float]:
         """Эмбеддинг одного запроса"""
         base = self.base_embeddings.embed_query(text)
         base = torch.tensor(base, dtype=torch.float32).unsqueeze(0)
         result = self._project_and_normalize(base)[0]
-        return result.tolist()  # Возвращаем list[float]
+        return result.tolist()  # list[float]

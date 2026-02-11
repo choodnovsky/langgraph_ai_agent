@@ -1,51 +1,21 @@
-from pathlib import Path
-
-from langchain_community.document_loaders import TextLoader
+from langchain_community.document_loaders import WebBaseLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_community.vectorstores import Chroma
-from chromadb import HttpClient
 
-from src.custom_embeddings import CustomEmbeddings
+urls = [
+    "https://lilianweng.github.io/posts/2024-11-28-reward-hacking/",
+    "https://lilianweng.github.io/posts/2024-07-07-hallucination/",
+    "https://lilianweng.github.io/posts/2024-04-12-diffusion-video/",
+]
 
+docs = [WebBaseLoader(url).load() for url in urls]
 
-WIKI_PATH = Path("./wiki")
-COLLECTION_NAME = "wiki_docs"
+docs_list = [item for sublist in docs for item in sublist]
 
-
-def load_txt_documents(path: Path):
-    docs = []
-    for file in path.glob("*.txt"):
-        loader = TextLoader(str(file), encoding="utf-8")
-        file_docs = loader.load()
-
-        for doc in file_docs:
-            doc.metadata["source"] = file.name
-
-        docs.extend(file_docs)
-
-    return docs
-
+text_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
+    chunk_size=100, chunk_overlap=50
+)
+doc_splits = text_splitter.split_documents(docs_list)
 
 if __name__ == "__main__":
-    docs = load_txt_documents(WIKI_PATH)
-
-    splitter = RecursiveCharacterTextSplitter(
-        chunk_size=500,
-        chunk_overlap=100
-    )
-    doc_splits = splitter.split_documents(docs)
-
-    embeddings = CustomEmbeddings()
-
-    client = HttpClient(
-        host="localhost",
-        port=8000
-    )
-
-    vectordb = Chroma(
-        client=client,
-        collection_name=COLLECTION_NAME,
-        embedding_function=embeddings
-    )
-
-    vectordb.add_documents(doc_splits)
+    content = doc_splits[0].page_content.strip()
+    print(content)

@@ -22,8 +22,8 @@ class Settings(BaseSettings):
     CHROMA_PORT: str
     COLLECTION_NAME: str
     FOLDER_PATH: str
-    CHUNK_SIZE: str
-    CHUNK_OVERLAP: str
+    CHUNK_SIZE: int
+    CHUNK_OVERLAP: int
     OPENAI_API_KEY: SecretStr
 
     model_config = SettingsConfigDict(env_file=env_path, env_file_encoding="utf-8")
