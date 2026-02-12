@@ -46,8 +46,8 @@ def diagnose_chromadb():
             allow_reset=False,
         ),
     )
-
     collection = client.get_collection(name=settings.COLLECTION_NAME)
+
 
     count = collection.count()
     print(f"\n[INFO] Всего документов в коллекции: {count}")

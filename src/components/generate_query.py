@@ -29,11 +29,3 @@ def generate_query_or_respond(state: MessagesState):
         .bind_tools([retriever_tool]).invoke(messages)
     )
     return {"messages": [response]}
-
-
-if __name__ == "__main__":
-    input_value = {
-        "messages": [{"role": "user", "content": "Что Лилиан Венг говорит о вознаграждениях по типам взлома?"}]}
-    messages = generate_query_or_respond(input_value)["messages"]
-    last_message = messages[-1]
-    last_message.pretty_print()
