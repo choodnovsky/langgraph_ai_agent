@@ -4,34 +4,25 @@ from typing import Literal
 
 from langchain.chat_models import init_chat_model
 from langgraph.graph import MessagesState
+from pydantic import BaseModel, Field
 
 from src.settings import settings
 
+GRADE_PROMPT = (
+    "Ты — эксперт, оценивающий релевантность извлеченного документа вопросу пользователя. \n "
+    "Вот извлеченный документ: \n\n {context} \n\n"
+    "Вот вопрос пользователя: {question} \n"
+    "Если документ содержит ключевые слова или семантический смысл, связанный с вопросом пользователя, оцени его как релевантный. \n"
+    "Дай бинарную оценку 'yes' (да) или 'no' (нет), чтобы указать, релевантен ли документ вопросу."
+)
 
-GRADE_PROMPT = """
-Ты — эксперт по оценке релевантности документа.
 
-Ответь СТРОГО одним словом:
-yes
-или
-no
+class GradeDocuments(BaseModel):
+    """Оценка документов с использованием бинарного балла для проверки релевантности."""
 
-Никаких объяснений.
-Никакого дополнительного текста.
-Только yes или no.
-
-Документ:
-{context}
-
-Вопрос:
-{question}
-
-Если документ содержит фактическую информацию,
-связанную с вопросом — ответь yes.
-
-Если документ содержит только заголовки,
-оглавление или нерелевантную информацию — ответь no.
-"""
+    binary_score: str = Field(
+        description="Оценка релевантности: 'yes', если документ релевантен, или 'no', если нет"
+    )
 
 
 grader_model = init_chat_model(
@@ -43,26 +34,21 @@ grader_model = init_chat_model(
 )
 
 
-def grade_documents(
-    state: MessagesState,
-) -> Literal["generate_answer", "rewrite_question"]:
+def grade_documents(state: MessagesState,) -> Literal["generate_answer", "rewrite_question"]:
     """Определить, релевантны ли извлеченные документы вопросу."""
-
     question = state["messages"][0].content
     context = state["messages"][-1].content
 
     prompt = GRADE_PROMPT.format(question=question, context=context)
-
-    response = grader_model.invoke(
-        [{"role": "user", "content": prompt}]
+    response = (
+        grader_model
+        .with_structured_output(GradeDocuments).invoke(
+            [{"role": "user", "content": prompt}]
+        )
     )
+    score = response.binary_score
 
-    content = response.content.strip().lower()
-
-    # защита от markdown и мусора
-    content = content.replace("```", "").strip()
-
-    if content.startswith("yes"):
+    if score == "yes":
         return "generate_answer"
 
     return "rewrite_question"

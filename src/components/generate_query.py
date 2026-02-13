@@ -1,3 +1,5 @@
+# src/components/generate_query.py
+
 from langchain.chat_models import init_chat_model
 from langchain_core.messages import SystemMessage
 from langgraph.graph import MessagesState
@@ -15,7 +17,7 @@ response_model = init_chat_model(
 
 SYSTEM_PROMPT = (
     "Ты — полезный помощник. Если тебе нужно использовать инструменты для поиска информации, "
-    "всегда формулируй поисковый запрос на английском языке."
+    "всегда формулируй поисковый запрос на русском языке."
 )
 
 

@@ -1,3 +1,5 @@
+# src/components/process_web_documents.py
+
 from langchain_community.document_loaders import WebBaseLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
@@ -12,10 +14,6 @@ docs = [WebBaseLoader(url).load() for url in urls]
 docs_list = [item for sublist in docs for item in sublist]
 
 text_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
-    chunk_size=100, chunk_overlap=50
+    chunk_size=800, chunk_overlap=150
 )
 doc_splits = text_splitter.split_documents(docs_list)
-
-if __name__ == "__main__":
-    content = doc_splits[0].page_content.strip()
-    print(content)

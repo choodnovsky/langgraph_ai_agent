@@ -1,8 +1,10 @@
+# src/components/process_txt_documents.py
+
 from langchain_community.document_loaders import DirectoryLoader, TextLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 loader = DirectoryLoader(
-    "/Users/victorchudnovskiy/Documents/langgraph_pet/wiki",
+    "wiki",
     glob="**/*.txt",
     loader_cls=TextLoader,
     loader_kwargs={"encoding": "utf-8"},
@@ -11,7 +13,7 @@ loader = DirectoryLoader(
 docs_list = loader.load()
 
 text_splitter = RecursiveCharacterTextSplitter(
-    chunk_size=1000,
+    chunk_size=800,
     chunk_overlap=150
 )
 
