@@ -1,28 +1,70 @@
+# src/components/retriever_tool.py
+
+from functools import lru_cache
 from langchain.tools import tool
 from langchain_core.vectorstores import InMemoryVectorStore
 from langchain_huggingface import HuggingFaceEmbeddings
-from src.components.process_web_documents import doc_splits as web_doc_splits
-from src.components.process_txt_documents import doc_splits as txt_doc_splits
-from langgraph.graph import MessagesState
 
-# Объединяем документы
-all_docs = web_doc_splits + txt_doc_splits
 
-# Эмбеддинги
-embeddings = HuggingFaceEmbeddings(model_name="intfloat/multilingual-e5-base")
+@lru_cache(maxsize=1)
+def get_vectorstore():
+    """Ленивая инициализация векторного хранилища.
 
-# Векторное хранилище
-vectorstore = InMemoryVectorStore.from_documents(
-    documents=all_docs,
-    embedding=embeddings
-)
-retriever = vectorstore.as_retriever(search_kwargs={"k": 5})
+    Загрузка документов и создание embeddings происходит только при первом вызове.
+    Результат кэшируется для повторного использования.
+    """
+
+    # Импортируем только когда нужно
+    from src.components.process_web_documents import get_web_documents
+    from src.components.process_txt_documents import get_txt_documents
+
+    # Получаем документы
+    web_docs = get_web_documents()
+    txt_docs = get_txt_documents()
+    all_docs = web_docs + txt_docs
+
+    # Создаем embeddings
+    embeddings = HuggingFaceEmbeddings(model_name="intfloat/multilingual-e5-base")
+
+    # Создаем векторное хранилище
+    vectorstore = InMemoryVectorStore.from_documents(
+        documents=all_docs,
+        embedding=embeddings
+    )
+
+    return vectorstore
+
+
+@lru_cache(maxsize=1)
+def get_retriever():
+    """Получить retriever (кэшируется)."""
+    vectorstore = get_vectorstore()
+    return vectorstore.as_retriever(search_kwargs={"k": 3})
+
 
 @tool
 def retrieve_docs(query: str) -> str:
-    """Поиск и получение информации из корпаративной wiki. Запрос должен быть на русском языке."""
+    """Поиск и получение информации из документов.
+
+    Ищет релевантную информацию в базе документов, которая включает:
+    - Блоги Лилиан Венг (на английском)
+    - Локальные текстовые документы (на русском/английском)
+
+    Args:
+        query: Поисковый запрос (на русском или английском языке)
+
+    Returns:
+        Объединенный текст найденных документов
+    """
+    # Retriever инициализируется только при первом вызове
+    retriever = get_retriever()
     docs = retriever.invoke(query)
-    return "\n\n".join([doc.page_content for doc in docs])
+
+    # Объединяем содержимое найденных документов
+    result = "\n\n---\n\n".join([doc.page_content for doc in docs])
+
+    return result
 
 
+# Экспортируем инструмент
 retriever_tool = retrieve_docs

@@ -1,28 +1,48 @@
 # src/components/process_txt_documents.py
 
+from functools import lru_cache
+from pathlib import Path
 from langchain_community.document_loaders import DirectoryLoader, TextLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-loader = DirectoryLoader(
-    "wiki",
-    glob="**/*.txt",
-    loader_cls=TextLoader,
-    loader_kwargs={"encoding": "utf-8"},
-)
 
-docs_list = loader.load()
+@lru_cache(maxsize=1)
+def get_txt_documents():
+    """Загрузить и разбить текстовые документы.
 
-text_splitter = RecursiveCharacterTextSplitter(
-    chunk_size=800,
-    chunk_overlap=150
-)
+    Вызывается только при первом использовании, результат кэшируется.
+    Это предотвращает медленную инициализацию при импорте.
+    """
+    # Используем относительный путь от корня проекта
+    project_root = Path(__file__).parent.parent.parent
+    wiki_path = project_root / "wiki"
 
-doc_splits = text_splitter.split_documents(docs_list)
+    # Проверяем существование директории
+    if not wiki_path.exists():
+        return []
 
-if __name__ == "__main__":
-    if doc_splits:
-        print("Chunks:", len(doc_splits))
-        print("Sample:\n", doc_splits[0].page_content.strip())
-        print("Metadata:", doc_splits[0].metadata)
-    else:
-        print("Нет загруженных документов")
+
+    loader = DirectoryLoader(
+        str(wiki_path),
+        glob="**/*.txt",
+        loader_cls=TextLoader,
+        loader_kwargs={"encoding": "utf-8"},
+    )
+
+    docs_list = loader.load()
+    # Унифицированные параметры сплиттера (как в web_documents)
+    text_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=800,
+        chunk_overlap=150,
+        length_function=len,
+        separators=["\n\n", "\n", " ", ""]
+    )
+
+    doc_splits = text_splitter.split_documents(docs_list)
+
+    return doc_splits
+
+
+# Для обратной совместимости (если кто-то импортирует doc_splits напрямую)
+# НО это вызовет загрузку при импорте - не рекомендуется
+# doc_splits = get_txt_documents()
