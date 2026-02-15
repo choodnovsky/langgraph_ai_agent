@@ -1,0 +1,10 @@
+{
+  "dependencies": [
+    "./requirements.txt"
+  ],
+  "graphs": {
+    "app": "./app.py:graph",
+    "app_pro": "./app_pro.py:graph"
+  },
+  "env": "./.env"
+}
