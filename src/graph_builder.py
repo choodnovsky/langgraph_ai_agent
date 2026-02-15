@@ -87,7 +87,11 @@ def build_graph():
     # После retrieve оцениваем релевантность документов
     workflow.add_conditional_edges(
         "retrieve",
-        grade_documents,  # Возвращает "generate_answer" или "rewrite_question"
+        grade_documents,
+        {
+            "generate_answer": "generate_answer",  # Явный маршрут
+            "rewrite_question": "rewrite_question",  # Явный маршрут
+        }
     )
 
     # После генерации ответа завершаем

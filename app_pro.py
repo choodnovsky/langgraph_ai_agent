@@ -176,20 +176,20 @@ if not st.session_state.messages:
     #### 💡 Попробуйте спросить:
     """)
 
-    # Примеры вопросов
-    col1, col2, col3 = st.columns(3)
-
-    examples = [
-        ("🎯 Reward hacking", "Что такое reward hacking?"),
-        ("🌀 Hallucination", "Объясни hallucination в LLM"),
-        ("🎨 Diffusion models", "Как работают diffusion models?")
-    ]
-
-    for col, (label, question) in zip([col1, col2, col3], examples):
-        with col:
-            if st.button(label, use_container_width=True, key=f"ex_{label}"):
-                st.session_state.example_prompt = question
-                st.rerun()
+    # # Примеры вопросов
+    # col1, col2, col3 = st.columns(3)
+    #
+    # examples = [
+    #     ("🎯 Reward hacking", "Что такое reward hacking?"),
+    #     ("🌀 Hallucination", "Объясни hallucination в LLM"),
+    #     ("🎨 Diffusion models", "Как работают diffusion models?")
+    # ]
+    #
+    # for col, (label, question) in zip([col1, col2, col3], examples):
+    #     with col:
+    #         if st.button(label, use_container_width=True, key=f"ex_{label}"):
+    #             st.session_state.example_prompt = question
+    #             st.rerun()
 
 # =============================
 # CHAT HISTORY
