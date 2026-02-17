@@ -2,7 +2,6 @@
 # Версия с более строгой оценкой релевантности
 
 from typing import Literal
-from functools import lru_cache
 
 from langchain.chat_models import init_chat_model
 from langgraph.graph import MessagesState
@@ -65,26 +64,31 @@ class GradeDocuments(BaseModel):
     )
 
 
-@lru_cache(maxsize=1)
+_grader_model = None
+
+
 def get_grader_model():
-    """Ленивая инициализация grader модели.
-    Модель создается только при первом вызове и кэшируется.
-    """
+    """Ленивая инициализация grader модели."""
+    global _grader_model
+
+    if _grader_model is not None:
+        return _grader_model
+
     from src.settings import settings
 
-    model = init_chat_model(
+    _grader_model = init_chat_model(
         model=settings.OPENAI_MODEL,
         temperature=0,  # Детерминированная оценка
-        api_key=settings.OPENAI_API_KEY,
+        api_key=settings.OPENAI_API_KEY.get_secret_value(),
         base_url=settings.BASE_URL,
         model_provider="openai",
     )
 
-    return model
+    return _grader_model
 
 
 def grade_documents(state: MessagesState) -> Literal["generate_answer", "rewrite_question"]:
-    """Определить, релевантны ли извлеченные документы вопросу.
+    """Оценка документов и возврат решения куда идти дальше.
 
     Возвращает:
     - "generate_answer": если документы релевантны
@@ -96,12 +100,12 @@ def grade_documents(state: MessagesState) -> Literal["generate_answer", "rewrite
     if not messages:
         return "rewrite_question"
 
-    # ВАЖНО: Берем ПОСЛЕДНИЙ вопрос пользователя (не первый!)
+    # Берем ПОСЛЕДНИЙ вопрос пользователя
     human_messages = [m for m in messages if isinstance(m, HumanMessage)]
     if not human_messages:
         return "rewrite_question"
 
-    question = human_messages[-1].content  # Последний вопрос
+    question = human_messages[-1].content
 
     # Находим последнее ToolMessage с результатами поиска
     tool_messages = [m for m in messages if isinstance(m, ToolMessage)]
@@ -122,7 +126,7 @@ def grade_documents(state: MessagesState) -> Literal["generate_answer", "rewrite
         return "rewrite_question"
 
     # Оцениваем релевантность
-    prompt = GRADE_PROMPT_STRICT.format(question=question, context=context[:1000])  # Ограничим контекст
+    prompt = GRADE_PROMPT_STRICT.format(question=question, context=context[:1000])
 
     try:
         # Получаем модель (инициализируется только при первом вызове)

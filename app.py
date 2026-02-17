@@ -3,7 +3,7 @@ import time
 import streamlit as st
 from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
 
-from src2.graph_builder import build_graph
+from src.graph_builder import build_graph
 
 
 # =============================

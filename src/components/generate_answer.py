@@ -4,13 +4,18 @@ from langgraph.graph import MessagesState
 from langchain_core.messages import ToolMessage
 
 GENERATE_PROMPT = (
-    "Ты — помощник по ответам на вопросы. "
-    "Используй следующие фрагменты извлеченного контекста, чтобы ответить на вопрос. "
-    "Если в контексте указан конкретный срок — укажи его точно. "
-    "Если ты не знаешь ответа, просто скажи, что не знаешь. "
-    "Используй максимум три предложения и старайся отвечать кратко.\n"
-    "Вопрос: {question} \n"
-    "Контекст: {context}"
+    "Ты — помощник по ответам на вопросы на основе предоставленных документов. "
+    "ВНИМАТЕЛЬНО прочитай контекст ниже и найди в нём прямой ответ на вопрос.\n\n"
+
+    "ВАЖНО:\n"
+    "- Если в контексте есть КОНКРЕТНАЯ информация (название инструмента, цифра, процесс) - используй её\n"
+    "- Ищи ключевые слова из вопроса в контексте\n"
+    "- НЕ говори 'в контексте нет информации', если она там есть - ищи внимательнее\n"
+    "- Отвечай кратко и по существу (максимум 2-3 предложения)\n\n"
+
+    "Вопрос: {question}\n\n"
+    "Контекст из документов:\n{context}\n\n"
+    "Ответ:"
 )
 
 
@@ -42,7 +47,6 @@ def generate_answer(state: MessagesState):
     if not tool_messages:
         # Резервный вариант: если нет ToolMessage, используем последнее сообщение
         context = messages[-1].content if messages else ""
-        # print("Warning: No ToolMessage found, using last message as context")
     else:
         context = tool_messages[-1].content
 
@@ -52,7 +56,5 @@ def generate_answer(state: MessagesState):
     # Получаем модель (инициализируется только при первом вызове)
     response_model = get_response_model()
     response = response_model.invoke([{"role": "user", "content": prompt}])
-
-    # print(f"Generated answer based on question: '{question[:50]}...'")
 
     return {"messages": [response]}

@@ -2,14 +2,22 @@
 
 from functools import lru_cache
 from langchain.tools import tool
+from langchain_core.vectorstores import InMemoryVectorStore
+from langchain_huggingface import HuggingFaceEmbeddings
 import chromadb
 from chromadb.config import Settings as ChromaSettings
 
 
+# ============================================================================
+# ChromaDB вариант (для txt файлов из watch-folder)
+# ============================================================================
+
+from functools import lru_cache
+
 @lru_cache(maxsize=1)
 def get_chroma_client():
     """Подключение к ChromaDB"""
-    from src2.settings import settings
+    from src.settings import settings
 
     try:
         client = chromadb.HttpClient(
@@ -28,8 +36,8 @@ def get_chroma_client():
 
 @lru_cache(maxsize=1)
 def get_chroma_collection():
-    """Получить коллекцию"""
-    from src2.settings import settings
+    """Получить коллекцию из ChromaDB"""
+    from src.settings import settings
 
     client = get_chroma_client()
 
@@ -57,11 +65,15 @@ def retrieve_docs(query: str) -> str:
     try:
         collection = get_chroma_collection()
 
-        # Поиск
+        # Поиск - берём больше документов для лучшего покрытия
         results = collection.query(
             query_texts=[query],
-            n_results=3
+            n_results=5  # Увеличили с 3 до 5
         )
+
+        # DEBUG: показываем что нашли
+        print(f"\n[DEBUG] Запрос: {query}")
+        print(f"[DEBUG] Найдено документов: {len(results['documents'][0]) if results['documents'] else 0}")
 
         if not results['documents'] or not results['documents'][0]:
             return "Документы не найдены."
@@ -69,6 +81,13 @@ def retrieve_docs(query: str) -> str:
         # Форматирование
         documents = results['documents'][0]
         metadatas = results['metadatas'][0] if results['metadatas'] else []
+
+        # DEBUG: показываем источники
+        for i, meta in enumerate(metadatas):
+            filename = meta.get('filename', 'Unknown') if meta else 'Unknown'
+            preview = documents[i][:100] if i < len(documents) else ''
+            print(f"[DEBUG] Документ {i+1}: {filename}")
+            print(f"[DEBUG] Превью: {preview}...")
 
         formatted = []
         for doc, meta in zip(documents, metadatas):
@@ -81,5 +100,5 @@ def retrieve_docs(query: str) -> str:
         return f"Ошибка поиска: {e}"
 
 
-# Экспорт
+
 retriever_tool = retrieve_docs

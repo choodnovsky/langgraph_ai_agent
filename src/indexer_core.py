@@ -79,7 +79,6 @@ class DocumentWatcher:
         self.settings = settings
         self.watch_dir = settings.FOLDER_PATH
         self.collection_name = settings.COLLECTION_NAME
-        self.check_interval = settings.CHECK_INTERVAL
         self.connector = ChromaDBConnector(settings)
         self.collection = None
         self.state = self.load_state()
@@ -99,7 +98,10 @@ class DocumentWatcher:
         """Сохранение состояния"""
         try:
             state_file = self.settings.INDEX_STATE_FILE
-            os.makedirs(os.path.dirname(state_file), exist_ok=True)
+            # Создаём директорию если не существует
+            state_dir = os.path.dirname(state_file)
+            if state_dir:
+                os.makedirs(state_dir, exist_ok=True)
             with open(state_file, 'w') as f:
                 json.dump(self.state, f, indent=2)
         except Exception as e:
@@ -287,34 +289,14 @@ class DocumentWatcher:
         except Exception as e:
             print(f"[{self.get_timestamp()}] ✗ Ошибка: {e}")
 
-    def start_watching(self):
-        """Запуск мониторинга"""
-        import time
-
+    def run_once(self):
+        """Однократная проверка и обновление - для запуска через cron"""
         if not self.initialize():
-            return
+            return False
 
-        print(f"\n{'=' * 80}")
-        print(f"🔍 Мониторинг запущен")
-        print(f"{'=' * 80}")
-        print(f"ChromaDB:   {self.settings.chroma_url}")
-        print(f"Коллекция:  {self.collection_name}")
-        print(f"Папка:      {self.watch_dir}")
-        print(f"Интервал:   {self.check_interval} сек")
-        print(f"Форматы:    .txt")
-        print(f"{'=' * 80}\n")
+        print(f"[{self.get_timestamp()}] ChromaDB:  {self.settings.chroma_url}")
+        print(f"[{self.get_timestamp()}] Коллекция: {self.collection_name}")
+        print(f"[{self.get_timestamp()}] Папка:     {self.watch_dir}")
 
-        print(f"[{self.get_timestamp()}] ⚡ Первичная индексация...")
         self.check_and_update()
-
-        print(f"\n[{self.get_timestamp()}] 👁 Мониторинг (Ctrl+C для остановки)...\n")
-
-        try:
-            while True:
-                time.sleep(self.check_interval)
-                print(f"[{self.get_timestamp()}] 🔄 Проверка...")
-                self.check_and_update()
-        except KeyboardInterrupt:
-            print(f"\n[{self.get_timestamp()}] ⏸ Остановка...")
-            self.save_state()
-            print(f"[{self.get_timestamp()}] ✓ Завершено")
+        return True

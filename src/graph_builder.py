@@ -1,10 +1,17 @@
 # src/graph_builder.py
+# !/usr/bin/env python3
+"""
+Пример использования RAG системы с LangGraph
+"""
+import sys
+from pathlib import Path
 
-from typing import TypedDict
+# Добавляем путь к модулям
+sys.path.insert(0, str(Path(__file__).parent))
 
-from langgraph.graph import StateGraph, START, END
-from langgraph.graph.message import MessagesState
+from langgraph.graph import StateGraph, MessagesState, START, END
 from langgraph.prebuilt import ToolNode, tools_condition
+from langchain_core.messages import HumanMessage
 
 
 class GraphState(MessagesState):
@@ -18,56 +25,55 @@ class GraphState(MessagesState):
     """
     rewrite_count: int = 0
 
-
 def build_graph():
     """Построить граф самокорректирующегося RAG с переформулированием вопросов.
 
-    ВАЖНО: Все импорты компонентов происходят ВНУТРИ функции,
-    чтобы не замедлять импорт модуля graph_builder.
+        ВАЖНО: Все импорты компонентов происходят ВНУТРИ функции,
+        чтобы не замедлять импорт модуля graph_builder.
 
-    Структура графа:
+        Структура графа:
 
-    START
-      ↓
-    generate_query_or_respond (LLM решает: искать или ответить напрямую)
-      ├─→ END (если может ответить без поиска)
-      └─→ retrieve (поиск в векторной БД через ToolNode)
-           ↓
-         grade_documents (оценка релевантности найденных документов)
-           ├─→ generate_answer (если документы релевантны)
-           │    ↓
-           │   END
-           └─→ rewrite_question (если нерелевантны, переформулировать)
-                ↓
-              generate_query_or_respond (новая попытка с переформулированным вопросом)
+        START
+          ↓
+        generate_query_or_respond (LLM решает: искать или ответить напрямую)
+          ├─→ END (если может ответить без поиска)
+          └─→ retrieve (поиск в векторной БД через ToolNode)
+               ↓
+             grade_documents (оценка релевантности найденных документов)
+               ├─→ generate_answer (если документы релевантны)
+               │    ↓
+               │   END
+               └─→ rewrite_question (если нерелевантны, переформулировать)
+                    ↓
+                  generate_query_or_respond (новая попытка с переформулированным вопросом)
 
-    Особенности:
-    - Максимум 2 попытки переформулирования (защита от бесконечных циклов)
-    - Ленивая инициализация всех компонентов
-    - Логирование на каждом шаге
-    - Проверки типов сообщений
-    """
+        Особенности:
+        - Максимум 2 попытки переформулирования (защита от бесконечных циклов)
+        - Ленивая инициализация всех компонентов
+        - Логирование на каждом шаге
+        - Проверки типов сообщений
+        """
 
     # Импортируем компоненты только при вызове build_graph()
     # Это критично для быстрого импорта модуля!
-    from src.components.generate_answer import generate_answer
     from src.components.generate_query import generate_query_or_respond
     from src.components.grade_documents import grade_documents
+    from src.components.generate_answer import generate_answer
     from src.components.rewrite_question import rewrite_question
+    # from src.components.retriever_tool import retriever_tool
+    from src.components.retriever_tool_chroma import retriever_tool
 
-    # retriever_tool импортируем отдельно для ToolNode
-    # Сам инструмент легкий, тяжелые операции в get_retriever()
-    from src.components.retriever_tool import retriever_tool
 
-    # Создаем граф с расширенным State
+    # Создаем граф
     workflow = StateGraph(GraphState)
 
-    # Определяем узлы графа
+    # Добавляем узлы
     workflow.add_node("generate_query_or_respond", generate_query_or_respond)
     workflow.add_node("retrieve", ToolNode([retriever_tool]))
     workflow.add_node("rewrite_question", rewrite_question)
     workflow.add_node("generate_answer", generate_answer)
 
+    # Рёбра
     # Начинаем с узла generate_query_or_respond
     workflow.add_edge(START, "generate_query_or_respond")
 
