@@ -22,15 +22,16 @@ class Settings(BaseSettings):
     COLLECTION_NAME: str = "documents"
 
     # Embeddings модель
-    EMBEDDINGS_MODEL: str = "intfloat/multilingual-e5-base"
+    EMBEDDINGS_MODEL: str
 
     # Настройки индексатора
     FOLDER_PATH: str = "./wiki"
-    CHUNK_SIZE: int = 800
-    CHUNK_OVERLAP: int = 150
+    CHUNK_SIZE: int
+    CHUNK_OVERLAP: int
+    CHECK_INTERVAL: int = 60
 
     # Файлы состояния
-    INDEX_STATE_FILE: str = "index_state.json"
+    INDEX_STATE_FILE: str
 
     # Только txt файлы!
     SUPPORTED_EXTENSIONS: str = ".txt"
