@@ -3,7 +3,7 @@
     "./requirements.txt"
   ],
   "graphs": {
-    "app_pro": "./app_pro.py:graph"
+    "app": "./app_pro.py:graph"
   },
   "env": "./.env"
 }

@@ -14,21 +14,19 @@ def get_vectorstore():
     import chromadb
     from langchain_chroma import Chroma
     from langchain_huggingface import HuggingFaceEmbeddings
+    from src.settings import settings
 
-    chroma_host      = os.getenv("CHROMA_HOST")
-    chroma_port      = int(os.getenv("CHROMA_PORT"))
-    collection_name  = os.getenv("COLLECTION_NAME")
-    embeddings_model = os.getenv("EMBEDDINGS_MODEL")
-
-    # Подключаемся к уже запущенному ChromaDB-серверу
-    client = chromadb.HttpClient(host=chroma_host, port=chroma_port)
+    client = chromadb.HttpClient(
+        host=settings.CHROMA_HOST,
+        port=int(settings.CHROMA_PORT),
+    )
 
     # Та же модель эмбеддингов, что использует indexer.py
-    embeddings = HuggingFaceEmbeddings(model_name=embeddings_model)
+    embeddings = HuggingFaceEmbeddings(model_name=settings.EMBEDDINGS_MODEL)
 
     vectorstore = Chroma(
         client=client,
-        collection_name=collection_name,
+        collection_name=settings.COLLECTION_NAME,
         embedding_function=embeddings,
     )
 
@@ -37,17 +35,14 @@ def get_vectorstore():
 
 @lru_cache(maxsize=1)
 def get_retriever():
-    """Получить retriever из ChromaDB (кэшируется)."""
-    vectorstore = get_vectorstore()
-    return vectorstore.as_retriever(search_kwargs={"k": 3})
+    return get_vectorstore().as_retriever(search_kwargs={"k": 3})
 
 
 @tool
 def retrieve_docs(query: str) -> str:
     """Поиск и получение информации из документов.
 
-    Ищет релевантную информацию в ChromaDB, которая содержит
-    локальные текстовые документы из папки wiki.
+    Ищет релевантную информацию в ChromaDB из локальных текстовых документов.
 
     Args:
         query: Поисковый запрос (на русском или английском языке)
@@ -55,11 +50,8 @@ def retrieve_docs(query: str) -> str:
     Returns:
         Объединённый текст найденных документов
     """
-    retriever = get_retriever()
-    docs = retriever.invoke(query)
-    result = "\n\n---\n\n".join([doc.page_content for doc in docs])
-    return result
+    docs = get_retriever().invoke(query)
+    return "\n\n---\n\n".join([doc.page_content for doc in docs])
 
 
-# Экспортируем инструмент (совместимо с graph_builder.py)
 retriever_tool = retrieve_docs

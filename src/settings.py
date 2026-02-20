@@ -37,6 +37,8 @@ class Settings(BaseSettings):
     SUPPORTED_EXTENSIONS: str = ".txt"
     TEXT_ENCODINGS: str = "utf-8,cp1251,latin-1"
 
+    POSTGRES_URI: str
+
     model_config = SettingsConfigDict(
         env_file=env_path,
         env_file_encoding="utf-8",
