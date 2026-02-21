@@ -61,7 +61,7 @@ def generate_query_or_respond(state: MessagesState):
     извлечь информацию с помощью инструмента поиска или просто ответить пользователю.
     """
     # Импортируем инструмент только когда он нужен
-    from src.components.retriever_tool import retriever_tool
+    from src.components.retriever_tool_chroma import retriever_tool
 
     messages = [SystemMessage(content=SYSTEM_PROMPT_WITH_EXAMPLES)] + state["messages"]
 

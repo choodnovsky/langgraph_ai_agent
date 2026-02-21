@@ -7,3 +7,4 @@ chroma_data
 embeddings/cache_1
 .jbeval/
 .venv/
+streamlit_credentials.yaml

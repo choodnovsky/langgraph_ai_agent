@@ -64,11 +64,9 @@ def grade_documents(state: MessagesState) -> Literal["generate_answer", "rewrite
 
     context = tool_messages[-1].content
 
-    # ✅ ПРАВИЛЬНЫЙ счётчик - по количеству HumanMessage в истории
-    # 1 = первый вопрос (0 попыток rewrite)
-    # 2 = после первого rewrite
-    # 3 = после второго rewrite → стоп
-    rewrite_count = len(human_messages) - 1
+    # Берём из GraphState — сбрасывается в 0 при каждом новом вопросе
+    # Не зависит от длины истории в Postgres
+    rewrite_count = state.get("rewrite_count", 0)
     print(f"[DEBUG grade] попытка={rewrite_count}, вопрос: {question[:60]}")
 
     if rewrite_count >= 2:

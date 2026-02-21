@@ -40,7 +40,6 @@ def build_graph(use_checkpointer: bool = False):
     from src.components.grade_documents import grade_documents
     from src.components.generate_answer import generate_answer
     from src.components.rewrite_question import rewrite_question
-    # from src.components.retriever_tool_localstore import retriever_tool
     from src.components.retriever_tool_chroma import retriever_tool
 
     # ── Граф (структура не изменилась) ───────────────────────────────────────
