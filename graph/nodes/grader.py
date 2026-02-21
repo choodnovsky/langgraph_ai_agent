@@ -1,4 +1,4 @@
-# src/components/grade_documents.py
+# graph/nodes/grader.py
 
 from typing import Literal
 
@@ -32,7 +32,7 @@ def get_grader_model():
     if _grader_model is not None:
         return _grader_model
 
-    from src.settings import settings
+    from config.settings import settings
 
     _grader_model = init_chat_model(
         model=settings.OPENAI_MODEL,

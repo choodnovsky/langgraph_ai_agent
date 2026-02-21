@@ -9,8 +9,8 @@ import streamlit_authenticator as stauth
 from yaml.loader import SafeLoader
 from streamlit_option_menu import option_menu
 
-from src.graph_builder import build_graph
-from chat import chat_page
+from graph.builder import build_graph
+from pages.chat import chat_page
 
 
 # =============================

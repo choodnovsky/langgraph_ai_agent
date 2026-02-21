@@ -1,6 +1,5 @@
-# src/components/retriever_tool_chroma.py
+# graph/nodes/retriever.py
 
-import os
 from functools import lru_cache
 from langchain.tools import tool
 
@@ -14,7 +13,7 @@ def get_vectorstore():
     import chromadb
     from langchain_chroma import Chroma
     from langchain_huggingface import HuggingFaceEmbeddings
-    from src.settings import settings
+    from config.settings import settings
 
     client = chromadb.HttpClient(
         host=settings.CHROMA_HOST,

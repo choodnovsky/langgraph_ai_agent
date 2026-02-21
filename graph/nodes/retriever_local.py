@@ -15,8 +15,8 @@ def get_vectorstore():
     """
 
     # Импортируем только когда нужно
-    from src.components.process_web_documents import get_web_documents
-    from src.components.process_txt_documents import get_txt_documents
+    from graph.nodes.process_web_docs import get_web_documents
+    from graph.nodes.process_txt_docs import get_txt_documents
 
     # Получаем документы
     web_docs = get_web_documents()

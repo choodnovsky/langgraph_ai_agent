@@ -1,4 +1,4 @@
-# src/components/generate_query.py
+# graph/nodes/query.py
 # Версия с few-shot примерами для лучшего роутинга
 
 from functools import lru_cache
@@ -41,7 +41,7 @@ def get_response_model():
 
     Модель создается только при первом вызове и кэшируется.
     """
-    from src.settings import settings
+    from config.settings import settings
 
     model = init_chat_model(
         model=settings.OPENAI_MODEL,
@@ -61,7 +61,7 @@ def generate_query_or_respond(state: MessagesState):
     извлечь информацию с помощью инструмента поиска или просто ответить пользователю.
     """
     # Импортируем инструмент только когда он нужен
-    from src.components.retriever_tool_chroma import retriever_tool
+    from graph.nodes.retriever import retriever_tool
 
     messages = [SystemMessage(content=SYSTEM_PROMPT_WITH_EXAMPLES)] + state["messages"]
 

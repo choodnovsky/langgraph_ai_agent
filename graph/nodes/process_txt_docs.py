@@ -1,4 +1,4 @@
-# src/components/process_txt_documents.py
+# graph/nodes/process_txt_docs.py
 
 from functools import lru_cache
 from pathlib import Path

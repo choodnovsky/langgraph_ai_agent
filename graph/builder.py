@@ -1,4 +1,4 @@
-# src/graph_builder.py
+# graph/builder.py
 # !/usr/bin/env python3
 """
 RAG система с LangGraph + персистентная память через PostgreSQL.
@@ -13,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from langgraph.graph import StateGraph, MessagesState, START, END
 from langgraph.prebuilt import ToolNode, tools_condition
+from graph.state import GraphState
 
 
 class GraphState(MessagesState):
@@ -36,11 +37,11 @@ def build_graph(use_checkpointer: bool = False):
 
     Таблицы в Postgres создаются автоматически при первом запуске (setup()).
     """
-    from src.components.generate_query import generate_query_or_respond
-    from src.components.grade_documents import grade_documents
-    from src.components.generate_answer import generate_answer
-    from src.components.rewrite_question import rewrite_question
-    from src.components.retriever_tool_chroma import retriever_tool
+    from graph.nodes.query import generate_query_or_respond
+    from graph.nodes.grader import grade_documents
+    from graph.nodes.answer import generate_answer
+    from graph.nodes.rewriter import rewrite_question
+    from graph.nodes.retriever import retriever_tool
 
     # ── Граф (структура не изменилась) ───────────────────────────────────────
     workflow = StateGraph(GraphState)
@@ -78,7 +79,7 @@ def build_graph(use_checkpointer: bool = False):
         import psycopg
         from psycopg.rows import dict_row
         from langgraph.checkpoint.postgres import PostgresSaver
-        from src.settings import settings
+        from config.settings import settings
 
         conn = psycopg.connect(
             settings.POSTGRES_URI,

@@ -1,4 +1,4 @@
-# src/components/generate_answer.py
+# graph/nodes/answer.py
 
 from langgraph.graph import MessagesState
 from langchain_core.messages import ToolMessage
@@ -29,7 +29,7 @@ def generate_answer(state: MessagesState):
     - Последний ToolMessage: результаты поиска
     """
     # Импортируем модель только когда нужна
-    from src.components.generate_query import get_response_model
+    from graph.nodes.query import get_response_model
     from langchain_core.messages import HumanMessage
 
     messages = state["messages"]

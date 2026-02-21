@@ -1,4 +1,4 @@
-# src/components/rewrite_question.py
+# src/components/rewriter.py
 
 from langchain_core.messages import HumanMessage
 from langgraph.graph import MessagesState
@@ -23,7 +23,7 @@ def rewrite_question(state: MessagesState):
     Увеличивает счетчик попыток переформулирования.
     """
     # Импортируем модель только когда нужна
-    from src.components.generate_query import get_response_model
+    from graph.nodes.query import get_response_model
 
     messages = state["messages"]
 

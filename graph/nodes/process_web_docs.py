@@ -1,4 +1,4 @@
-# src/components/process_web_documents.py
+# graph/nodes/process_web_docs.py
 
 from functools import lru_cache
 from langchain_community.document_loaders import WebBaseLoader
@@ -26,7 +26,7 @@ def get_web_documents():
     # Разворачиваем список списков в плоский список
     docs_list = [item for sublist in docs for item in sublist]
 
-    # Унифицированные параметры с process_txt_documents.py
+    # Унифицированные параметры с process_txt_docs.py
     text_splitter = RecursiveCharacterTextSplitter(
         chunk_size=800,
         chunk_overlap=150,
