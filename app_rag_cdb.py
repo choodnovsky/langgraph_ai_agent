@@ -1,4 +1,4 @@
-# app_ragmem.py
+# app_rag_cdb.py
 
 import time
 import streamlit as st

@@ -1,7 +1,9 @@
-# app_rag.py
-
+# app.py
 import time
+import yaml
 import streamlit as st
+import streamlit_authenticator as stauth
+from yaml.loader import SafeLoader
 from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
 
 from src.graph_builder import build_graph
@@ -17,12 +19,11 @@ def stream_text(text: str, delay: float = 0.015):
 # INIT
 # =============================
 st.set_page_config(page_title="ИИ агент", layout="wide")
-st.title("🤖 ИИ агент")
 
 
 @st.cache_resource(show_spinner="Загружаю RAG систему...")
 def get_graph():
-    return build_graph()
+    return build_graph(use_checkpointer=True)
 
 
 try:
@@ -31,17 +32,47 @@ except Exception as e:
     st.error(f"Ошибка загрузки графа: {e}")
     st.stop()
 
-if "messages" not in st.session_state:
-    st.session_state.messages = []
+
+# =============================
+# АВТОРИЗАЦИЯ
+# =============================
+with open("streamlit_credentials.yaml") as f:
+    config = yaml.load(f, Loader=SafeLoader)
+
+authenticator = stauth.Authenticate(
+    config["credentials"],
+    config["cookie"]["name"],
+    config["cookie"]["key"],
+    config["cookie"]["expiry_days"],
+)
+
+authenticator.login()
+
+if st.session_state.get("authentication_status") is False:
+    st.error("Неверный логин или пароль")
+    st.stop()
+
+if st.session_state.get("authentication_status") is None:
+    st.warning("Введите логин и пароль")
+    st.stop()
+
+# username → thread_id для памяти в Postgres
+thread_id = st.session_state["username"]
+config_graph = {"configurable": {"thread_id": thread_id}}
 
 if "meta" not in st.session_state:
     st.session_state.meta = []
 
 
 # =============================
-# SIDEBAR — найденный документ
+# SIDEBAR
 # =============================
 with st.sidebar:
+    st.title("🤖 ИИ агент")
+    st.caption(f"Привет, **{st.session_state['name']}**")
+    authenticator.logout("Выйти", location="sidebar")
+
+    st.divider()
     st.header("📄 Найденный фрагмент")
 
     if st.session_state.meta:
@@ -62,20 +93,22 @@ with st.sidebar:
     else:
         st.caption("Здесь появится текст документа после первого запроса")
 
-    st.divider()
-    if st.button("🗑️ Очистить историю", use_container_width=True):
-        st.session_state.messages = []
-        st.session_state.meta = []
-        st.rerun()
-
 
 # =============================
-# CHAT HISTORY
+# CHAT HISTORY — из Postgres
 # =============================
-for msg in st.session_state.messages:
-    role = "user" if isinstance(msg, HumanMessage) else "assistant"
-    with st.chat_message(role):
-        st.write(msg.content)
+st.title("🤖 ИИ агент")
+
+state = graph.get_state(config_graph)
+history = state.values.get("messages", []) if state and state.values else []
+
+for msg in history:
+    if isinstance(msg, HumanMessage):
+        with st.chat_message("user"):
+            st.write(msg.content)
+    elif isinstance(msg, AIMessage) and msg.content:
+        with st.chat_message("assistant"):
+            st.write(msg.content)
 
 
 # =============================
@@ -85,25 +118,21 @@ if prompt := st.chat_input("Введите сообщение..."):
     with st.chat_message("user"):
         st.write(prompt)
 
-    st.session_state.messages.append(HumanMessage(content=prompt))
-    st.session_state.messages = st.session_state.messages[-12:]
-    st.session_state.meta = st.session_state.meta[-12:]
-
-    prev_len = len(st.session_state.messages)
+    prev_len = len(history)
 
     try:
         with st.spinner("Ищу информацию..."):
-            result = graph.invoke({"messages": st.session_state.messages})
+            result = graph.invoke(
+                {"messages": [HumanMessage(content=prompt)]},
+                config=config_graph,
+            )
 
         messages = result["messages"]
         ai_msg = messages[-1]
 
         with st.chat_message("assistant"):
-            streamed_text = st.write_stream(stream_text(ai_msg.content))
+            st.write_stream(stream_text(ai_msg.content))
 
-        st.session_state.messages.append(AIMessage(content=streamed_text))
-
-        # Извлекаем мета из текущего хода
         new_messages = messages[prev_len:]
         tool_meta = None
 
