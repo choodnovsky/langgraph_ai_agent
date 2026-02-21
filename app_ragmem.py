@@ -1,4 +1,5 @@
-# app_pro.py
+# app_ragmem.py
+
 import time
 import streamlit as st
 from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
@@ -21,7 +22,7 @@ st.title("🤖 ИИ агент")
 
 @st.cache_resource(show_spinner="Загружаю RAG систему...")
 def get_graph():
-    return build_graph()
+    return build_graph(use_checkpointer=True)
 
 
 try:
@@ -30,17 +31,36 @@ except Exception as e:
     st.error(f"Ошибка загрузки графа: {e}")
     st.stop()
 
-if "messages" not in st.session_state:
-    st.session_state.messages = []
+
+# =============================
+# АВТОРИЗАЦИЯ (никнейм)
+# =============================
+if "thread_id" not in st.session_state:
+    st.subheader("Представьтесь, пожалуйста")
+    name = st.text_input("Ваш никнейм", placeholder="например: victor")
+    if st.button("Начать") and name.strip():
+        st.session_state.thread_id = name.strip().lower()
+        st.rerun()
+    st.stop()
+
+thread_id = st.session_state.thread_id
+config = {"configurable": {"thread_id": thread_id}}
 
 if "meta" not in st.session_state:
     st.session_state.meta = []
 
 
 # =============================
-# SIDEBAR — найденный документ
+# SIDEBAR
 # =============================
 with st.sidebar:
+    st.caption(f"Сессия: `{thread_id}`")
+    if st.button("Выйти", use_container_width=True):
+        del st.session_state.thread_id
+        st.session_state.meta = []
+        st.rerun()
+
+    st.divider()
     st.header("📄 Найденный фрагмент")
 
     if st.session_state.meta:
@@ -61,20 +81,20 @@ with st.sidebar:
     else:
         st.caption("Здесь появится текст документа после первого запроса")
 
-    st.divider()
-    if st.button("🗑️ Очистить историю", use_container_width=True):
-        st.session_state.messages = []
-        st.session_state.meta = []
-        st.rerun()
-
 
 # =============================
-# CHAT HISTORY
+# CHAT HISTORY — из Postgres
 # =============================
-for msg in st.session_state.messages:
-    role = "user" if isinstance(msg, HumanMessage) else "assistant"
-    with st.chat_message(role):
-        st.write(msg.content)
+state = graph.get_state(config)
+history = state.values.get("messages", []) if state and state.values else []
+
+for msg in history:
+    if isinstance(msg, HumanMessage):
+        with st.chat_message("user"):
+            st.write(msg.content)
+    elif isinstance(msg, AIMessage) and msg.content:
+        with st.chat_message("assistant"):
+            st.write(msg.content)
 
 
 # =============================
@@ -84,25 +104,21 @@ if prompt := st.chat_input("Введите сообщение..."):
     with st.chat_message("user"):
         st.write(prompt)
 
-    st.session_state.messages.append(HumanMessage(content=prompt))
-    st.session_state.messages = st.session_state.messages[-12:]
-    st.session_state.meta = st.session_state.meta[-12:]
-
-    prev_len = len(st.session_state.messages)
+    prev_len = len(history)
 
     try:
         with st.spinner("Ищу информацию..."):
-            result = graph.invoke({"messages": st.session_state.messages})
+            result = graph.invoke(
+                {"messages": [HumanMessage(content=prompt)]},
+                config=config,
+            )
 
         messages = result["messages"]
         ai_msg = messages[-1]
 
         with st.chat_message("assistant"):
-            streamed_text = st.write_stream(stream_text(ai_msg.content))
+            st.write_stream(stream_text(ai_msg.content))
 
-        st.session_state.messages.append(AIMessage(content=streamed_text))
-
-        # Извлекаем мета из текущего хода
         new_messages = messages[prev_len:]
         tool_meta = None
 
