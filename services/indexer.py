@@ -5,32 +5,25 @@ indexer.py — сканирует FOLDER_PATH, загружает/обновля
 Запускается вручную или по cron.
 
 Пример cron (каждые 10 минут):
-    */10 * * * * /usr/bin/python3 /path/to/indexer.py >> /var/log/indexer.log 2>&1
+    */10 * * * * /usr/bin/python3 /path/to/services/indexer.py >> /var/log/indexer.log 2>&1
 """
 
 import hashlib
 import json
-import os
 import sys
 from pathlib import Path
 from datetime import datetime
 
-# ── Загружаем .env если есть ────────────────────────────────────────────────
-try:
-    from dotenv import load_dotenv
-    load_dotenv()
-except ImportError:
-    pass  # python-dotenv не обязателен, можно передавать env через shell
+from config.settings import settings
 
-# ── Настройки из переменных окружения ───────────────────────────────────────
-FOLDER_PATH       = Path(os.environ["FOLDER_PATH"])
-CHROMA_HOST       = os.getenv("CHROMA_HOST")
-CHROMA_PORT       = int(os.getenv("CHROMA_PORT"))
-COLLECTION_NAME   = os.getenv("COLLECTION_NAME")
-EMBEDDINGS_MODEL  = os.getenv("EMBEDDINGS_MODEL")
-INDEX_STATE_FILE  = Path(os.getenv("INDEX_STATE_FILE"))
-CHUNK_SIZE        = int(os.getenv("CHUNK_SIZE"))
-CHUNK_OVERLAP     = int(os.getenv("CHUNK_OVERLAP"))
+FOLDER_PATH      = Path(settings.FOLDER_PATH)
+CHROMA_HOST      = settings.CHROMA_HOST
+CHROMA_PORT      = int(settings.CHROMA_PORT)
+COLLECTION_NAME  = settings.COLLECTION_NAME
+EMBEDDINGS_MODEL = settings.EMBEDDINGS_MODEL
+INDEX_STATE_FILE = Path(settings.INDEX_STATE_FILE)
+CHUNK_SIZE       = int(settings.CHUNK_SIZE)
+CHUNK_OVERLAP    = int(settings.CHUNK_OVERLAP)
 
 
 # ── Вспомогательные функции ──────────────────────────────────────────────────
@@ -83,7 +76,6 @@ def get_chroma_collection():
     """Подключается к ChromaDB и возвращает коллекцию."""
     import chromadb
     client = chromadb.HttpClient(host=CHROMA_HOST, port=CHROMA_PORT)
-    # get_or_create — безопасно при первом запуске
     collection = client.get_or_create_collection(
         name=COLLECTION_NAME,
         metadata={"hnsw:space": "cosine"},
@@ -133,10 +125,7 @@ def upsert_file(collection, embeddings_model, filepath: Path):
 
     texts = [c.page_content for c in chunks]
     vectors = embeddings_model.embed_documents(texts)
-
-    # Стабильные IDs на основе пути файла + порядкового номера чанка
     ids = doc_ids_for_file(str(filepath), len(chunks))
-
     metadatas = [
         {
             "source": str(filepath),
@@ -160,18 +149,13 @@ def run():
     log(f"Старт индексации: {FOLDER_PATH}")
     log(f"ChromaDB: {CHROMA_HOST}:{CHROMA_PORT} / коллекция: {COLLECTION_NAME}")
 
-    # Подключаемся к ChromaDB
     _, collection = get_chroma_collection()
     log(f"Документов в коллекции до старта: {collection.count()}")
 
-    # Загружаем сохранённые хэши
     state = load_state()
-
-    # Сканируем папку
     current_files = scan_txt_files()
     log(f"Найдено .txt файлов: {len(current_files)}")
 
-    # Инициализируем модель только если есть что делать
     files_to_update = []
     for filepath_str, filepath in current_files.items():
         current_hash = md5_file(filepath)
@@ -179,40 +163,28 @@ def run():
         if current_hash != saved_hash:
             files_to_update.append((filepath_str, filepath, current_hash))
 
-    # Удалённые файлы (были в state, нет в папке)
     deleted_files = [fp for fp in state if fp not in current_files]
 
     if not files_to_update and not deleted_files:
         log("Изменений нет. Выход.")
         return
 
-    # Загружаем модель эмбеддингов только если нужно
     embeddings_model = get_embeddings_model()
 
-    # Обрабатываем изменённые / новые файлы
     for filepath_str, filepath, new_hash in files_to_update:
         action = "Обновление" if filepath_str in state else "Добавление"
         log(f"{action}: {filepath.name}")
-
-        # Удаляем старые чанки этого файла (если были)
         delete_file_chunks(collection, filepath_str)
-
-        # Загружаем новые чанки
         n = upsert_file(collection, embeddings_model, filepath)
         log(f"  Загружено чанков: {n}")
-
-        # Обновляем хэш в state
         state[filepath_str] = new_hash
 
-    # Удаляем чанки удалённых файлов
     for filepath_str in deleted_files:
         log(f"Удаление (файл пропал): {Path(filepath_str).name}")
         delete_file_chunks(collection, filepath_str)
         del state[filepath_str]
 
-    # Сохраняем обновлённый state
     save_state(state)
-
     log(f"Документов в коллекции после: {collection.count()}")
     log("Индексация завершена.")
     log("=" * 60)

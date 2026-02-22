@@ -28,7 +28,8 @@ class Settings(BaseSettings):
     FOLDER_PATH: str = "./wiki"
     CHUNK_SIZE: int
     CHUNK_OVERLAP: int
-    CHECK_INTERVAL: int = 60
+    CHECK_INTERVAL: int
+    INDEX_STATE_FILE: str
 
     # Файлы состояния
     INDEX_STATE_FILE: str

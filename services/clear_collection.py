@@ -21,18 +21,20 @@ import os
 import sys
 from pathlib import Path
 from datetime import datetime
-
-try:
-    from dotenv import load_dotenv
-    load_dotenv()
-except ImportError:
-    pass
+from config.settings import settings
 
 
-CHROMA_HOST      = os.getenv("CHROMA_HOST")
-CHROMA_PORT      = int(os.getenv("CHROMA_PORT"))
-COLLECTION_NAME  = os.getenv("COLLECTION_NAME")
-INDEX_STATE_FILE = Path(os.getenv("INDEX_STATE_FILE"))
+# try:
+#     from dotenv import load_dotenv
+#     load_dotenv()
+# except ImportError:
+#     pass
+
+
+CHROMA_HOST      = settings.CHROMA_HOST
+CHROMA_PORT      = int(settings.CHROMA_PORT)
+COLLECTION_NAME  = settings.COLLECTION_NAME
+INDEX_STATE_FILE = Path(settings.INDEX_STATE_FILE)
 
 
 def log(msg: str):
