@@ -32,7 +32,7 @@
 
 ### Граф обработки запроса
 
-![RAG Agent Graph](docs/schema_graph.jpg)
+![RAG Agent Graph](docs/schema_graph.png)
 
 
 ### Стек технологий
@@ -40,9 +40,9 @@
 | Слой | Технология |
 |------|-----------|
 | Граф агента | LangGraph |
-| LLM | OpenRouter (GLM / Gemini) |
+| LLM | OpenRouter `z-ai/glm-4.5-air:free` |
 | Векторная БД | ChromaDB |
-| Эмбеддинги | HuggingFace `multilingual-e5-base` |
+| Эмбеддинги | HuggingFace `intfloat/multilingual-e5-base` |
 | Долгосрочная память | PostgreSQL (LangGraph Checkpointer) |
 | UI | Streamlit |
 | Авторизация | streamlit-authenticator |
