@@ -33,7 +33,7 @@
 ### Граф обработки запроса
 
 ```
-![RAG Agent Graph](../schema_graph.png)
+![RAG Agent Graph](docs/schema_graph.png)
 ```
 
 ### Стек технологий
