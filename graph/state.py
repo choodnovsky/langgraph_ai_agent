@@ -13,3 +13,4 @@ class GraphState(MessagesState):
     - rewrite_count: int — количество попыток переформулирования вопроса
     """
     rewrite_count: int = 0
+    summary: str = ""

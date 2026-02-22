@@ -1,64 +1,55 @@
 # graph/builder.py
-# !/usr/bin/env python3
-"""
-RAG система с LangGraph + персистентная память через PostgreSQL.
 
-Checkpointer сохраняет состояние графа (историю messages) в Postgres после
-каждого шага. При перезапуске граф восстанавливает историю по thread_id.
-"""
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).parent))
-
-from langgraph.graph import StateGraph, MessagesState, START, END
+from langgraph.graph import StateGraph, START, END
 from langgraph.prebuilt import ToolNode, tools_condition
+
 from graph.state import GraphState
 
 
-class GraphState(MessagesState):
-    """Расширенный State для отслеживания дополнительной информации.
-
-    Наследуется от MessagesState, который предоставляет:
-    - messages: List[BaseMessage] - история сообщений
-
-    Добавляем:
-    - rewrite_count: int - количество попыток переформулирования вопроса
-    """
-    rewrite_count: int = 0
-
-
 def build_graph(use_checkpointer: bool = False):
-    """Построить граф с персистентной памятью через PostgreSQL.
+    """Построить RAG граф с самокоррекцией.
 
-    Структура графа не изменилась. Добавлен PostgresSaver как checkpointer —
-    он автоматически сохраняет state после каждого узла и восстанавливает
-    историю по thread_id при следующем вызове.
+    Параметры:
+    - use_checkpointer=True  — для Streamlit, память через PostgreSQL
+    - use_checkpointer=False — для LangGraph Studio, Studio управляет памятью сам
 
-    Таблицы в Postgres создаются автоматически при первом запуске (setup()).
+    Структура графа:
+        START
+          ↓
+        query        (LLM: искать или ответить напрямую)
+          ├─→ summarizer    (прямой ответ → проверка нужна ли сводка)
+          └─→ retrieve
+               ↓
+             grader
+               ├─→ answer → summarizer
+               └─→ rewriter → query (новая попытка, макс 2)
+          summarizer
+               ├─→ END      (история короткая)
+               └─→ END      (история свёрнута в сводку)
     """
     from graph.nodes.query import generate_query_or_respond
     from graph.nodes.grader import grade_documents
     from graph.nodes.answer import generate_answer
     from graph.nodes.rewriter import rewrite_question
     from graph.nodes.retriever import retriever_tool
+    from graph.nodes.summarizer import summarize_conversation, should_summarize
 
-    # ── Граф (структура не изменилась) ───────────────────────────────────────
     workflow = StateGraph(GraphState)
 
-    workflow.add_node("generate_query_or_respond", generate_query_or_respond)
+    workflow.add_node("query", generate_query_or_respond)
     workflow.add_node("retrieve", ToolNode([retriever_tool]))
-    workflow.add_node("rewrite_question", rewrite_question)
-    workflow.add_node("generate_answer", generate_answer)
+    workflow.add_node("answer", generate_answer)
+    workflow.add_node("rewriter", rewrite_question)
+    workflow.add_node("summarizer", summarize_conversation)
 
-    workflow.add_edge(START, "generate_query_or_respond")
+    workflow.add_edge(START, "query")
 
     workflow.add_conditional_edges(
-        "generate_query_or_respond",
+        "query",
         tools_condition,
         {
             "tools": "retrieve",
-            END: END,
+            END: "summarizer",
         },
     )
 
@@ -66,15 +57,16 @@ def build_graph(use_checkpointer: bool = False):
         "retrieve",
         grade_documents,
         {
-            "generate_answer": "generate_answer",
-            "rewrite_question": "rewrite_question",
+            "answer": "answer",
+            "rewriter": "rewriter",
         }
     )
 
-    workflow.add_edge("generate_answer", END)
-    workflow.add_edge("rewrite_question", "generate_query_or_respond")
+    workflow.add_edge("answer", "summarizer")
+    workflow.add_edge("rewriter", "query")
+    workflow.add_conditional_edges("summarizer", should_summarize)
 
-    # ── Checkpointer (только для Streamlit, Studio управляет сам) ───────────
+    # ── Checkpointer ─────────────────────────────────────────────────────────
     if use_checkpointer:
         import psycopg
         from psycopg.rows import dict_row
@@ -92,5 +84,6 @@ def build_graph(use_checkpointer: bool = False):
 
     return workflow.compile()
 
-# Экспорт для LangGraph Studio (без checkpointer — Studio управляет сам)
+
+# Экспорт для LangGraph Studio (Studio управляет памятью сам через POSTGRES_URI)
 graph = build_graph(use_checkpointer=False)

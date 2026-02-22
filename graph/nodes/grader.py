@@ -45,22 +45,22 @@ def get_grader_model():
     return _grader_model
 
 
-def grade_documents(state: MessagesState) -> Literal["generate_answer", "rewrite_question"]:
+def grade_documents(state) -> Literal["answer", "rewriter"]:
     """Оценка документов - используется как conditional edge."""
     messages = state["messages"]
 
     if not messages:
-        return "rewrite_question"
+        return "rewriter"
 
     human_messages = [m for m in messages if isinstance(m, HumanMessage)]
     if not human_messages:
-        return "rewrite_question"
+        return "rewriter"
 
     question = human_messages[-1].content
 
     tool_messages = [m for m in messages if isinstance(m, ToolMessage)]
     if not tool_messages:
-        return "rewrite_question"
+        return "rewriter"
 
     context = tool_messages[-1].content
 
@@ -71,29 +71,29 @@ def grade_documents(state: MessagesState) -> Literal["generate_answer", "rewrite
 
     if rewrite_count >= 2:
         print(f"[DEBUG grade] лимит попыток → generate_answer")
-        return "generate_answer"
+        return "answer"
 
     if not context or len(context.strip()) < 50:
         print(f"[DEBUG grade] пустой контекст → rewrite_question")
-        return "rewrite_question"
+        return "rewriter"
 
     prompt = GRADE_PROMPT_STRICT.format(question=question, context=context[:1500])
 
     try:
         grader_model = get_grader_model()
 
-        # ✅ Простой вызов без with_structured_output - работает с любой моделью
+        # Простой вызов без with_structured_output - работает с любой моделью
         response = grader_model.invoke([{"role": "user", "content": prompt}])
         answer = response.content.strip().lower()
         print(f"[DEBUG grade] ответ модели: '{answer}'")
 
         if "yes" in answer:
             print(f"[DEBUG grade] релевантен → generate_answer")
-            return "generate_answer"
+            return "answer"
         else:
             print(f"[DEBUG grade] нерелевантен → rewrite_question")
-            return "rewrite_question"
+            return "rewriter"
 
     except Exception as e:
         print(f"[DEBUG grade] ошибка: {e} → generate_answer")
-        return "generate_answer"
+        return "answer"
