@@ -42,21 +42,25 @@ START
    (вызвал tool)    (ответил сам)
         │                │
         ▼                ▼
-   retrieve          summarizer ──► END
-   ToolNode              ▲
-        │                │
-        ▼                │
-   grade_documents       │
-        │                │
-   ┌────┴────┐           │
-   │         │           │
-(релевантно) │     (нерелевантно)
-   │         └──► rewriter ──► query (повтор)
-   ▼
- answer
+   retrieve             END   ← прямой ответ завершается сразу
+   ToolNode
+        │
+        ▼
+   grade_documents
+        │
+   ┌────┴────┐
+   │         │
+(релевантно) (нерелевантно)
+   │         │
+   ▼         ▼
+ answer    rewriter ──► query (повтор)
    │
    ▼
-summarizer ──► END
+should_summarize
+   │
+   ├─(история > 10)──► summarizer ──► END
+   │
+   └─(история ≤ 10)──► END
 ```
 
 ### Режимы работы
@@ -143,10 +147,10 @@ workflow.add_node("summarizer",summarize_conversation)
 # Точка входа
 workflow.add_edge(START, "query")
 
-# После query: искать или ответить?
+# После query: искать или ответить напрямую?
 workflow.add_conditional_edges("query", tools_condition, {
     "tools": "retrieve",
-    END:     "summarizer",
+    END:     END,           # прямой ответ → сразу END, без суммаризации
 })
 
 # После retrieve: документы релевантны?
@@ -155,13 +159,28 @@ workflow.add_conditional_edges("retrieve", grade_documents, {
     "rewriter": "rewriter",
 })
 
-# Фиксированные переходы
-workflow.add_edge("answer",   "summarizer")
-workflow.add_edge("rewriter", "query")
+# После answer: нужна ли суммаризация?
+workflow.add_conditional_edges("answer", should_summarize, {
+    "summarizer": "summarizer",
+    "__end__":    END,
+})
 
-# После summarizer: нужна ли ещё суммаризация?
-workflow.add_conditional_edges("summarizer", should_summarize)
+# Фиксированные переходы
+workflow.add_edge("summarizer", END)
+workflow.add_edge("rewriter",   "query")
 ```
+
+### Ключевое отличие от предыдущей версии
+
+В старой версии `summarizer` вызывался **всегда** после `answer` и после прямого ответа, а `should_summarize` стояла уже после `summarizer`. Это означало лишний вход в узел при каждом ответе.
+
+В новой версии `should_summarize` стоит **перед** `summarizer` — как условное ребро после `answer`. Суммаризатор вызывается только когда порог реально превышен. При прямом ответе (без поиска) граф идёт напрямую в `END`, минуя суммаризатор полностью.
+
+| Событие | Старая схема | Новая схема |
+|---------|-------------|-------------|
+| Прямой ответ LLM | `query → summarizer → END` | `query → END` |
+| Ответ через RAG, история < 10 | `answer → summarizer → END` | `answer → END` |
+| Ответ через RAG, история > 10 | `answer → summarizer → END` | `answer → summarizer → END` |
 
 ### Checkpointer (режим Streamlit)
 
@@ -456,14 +475,14 @@ def generate_answer(state: MessagesState):
 
 ### Роль в графе
 
-Вызывается после каждого ответа (и при прямом ответе без поиска).  
-Сжимает историю диалога когда она становится слишком длинной.
+Вызывается **только когда история превышает порог** (> 10 сообщений) — решение принимается в `should_summarize` до входа в узел.  
+Сжимает историю диалога: удаляет старые сообщения, сохраняет сводку в `state["summary"]`.
 
 ### Константы
 
 ```python
 MESSAGES_TO_KEEP = 4    # сколько сообщений оставить после сжатия
-SUMMARIZE_AFTER  = 10   # порог запуска суммаризации
+SUMMARIZE_AFTER  = 50   # порог запуска суммаризации
 ```
 
 Стратегия: история растёт → достигает 10 → сжимается до 4 → снова растёт → снова сжимается.
@@ -472,12 +491,16 @@ SUMMARIZE_AFTER  = 10   # порог запуска суммаризации
 
 ```python
 def should_summarize(state) -> Literal["summarizer", "__end__"]:
+    """Conditional edge ДО summarizer: нужна ли суммаризация?"""
     if len(state["messages"]) > SUMMARIZE_AFTER:
+        print(f"[summarizer] Порог достигнут ({len(state['messages'])} сообщений) → суммаризируем")
         return "summarizer"
     return "__end__"
 ```
 
-Обратите внимание: эта функция используется **после** узла `summarizer`. То есть `summarizer` вызывается всегда (проверяет условие внутри), а `should_summarize` решает — нужна ли ещё одна итерация.
+Эта функция стоит **перед** узлом `summarizer` — как условное ребро после `answer` в `builder.py`.  
+Узел `summarize_conversation` вызывается только когда условие выполнено.
+
 
 ### Логика суммаризации
 
@@ -486,20 +509,20 @@ def summarize_conversation(state):
     summary = state.get("summary", "")
 
     if summary:
-        # Дополняем существующую сводку
+        # Дополняем существующую сводку — старые факты не теряются
         summary_message = f"Это сводка на данный момент: {summary}\n\nДополни сводку..."
     else:
         # Создаём с нуля
         summary_message = "Создай краткую сводку разговора..."
 
-    # Добавляем инструкцию в конец истории как HumanMessage
+    # Добавляем инструкцию в конец истории как HumanMessage (не сохраняется в state)
     messages = state["messages"] + [HumanMessage(content=summary_message)]
     response = get_response_model().invoke(messages)
 
-    # Формируем команды на удаление старых сообщений
+    # Формируем команды на удаление всех сообщений кроме последних 4
     delete_messages = [
         RemoveMessage(id=m.id)
-        for m in state["messages"][:-MESSAGES_TO_KEEP]  # все кроме последних 4
+        for m in state["messages"][:-MESSAGES_TO_KEEP]
     ]
 
     return {
@@ -531,37 +554,36 @@ state["messages"] = [последние 4 сообщения]
 
 ```
 START → query (LLM решает: ответить напрямую)
-      → summarizer (should_summarize: история < 10)
       → END
 ```
 
-### Сценарий 2: Поиск с первой попытки
+Суммаризатор не вызывается вообще — при прямом ответе граф уходит сразу в `END`.
+
+### Сценарий 2: Поиск с первой попытки, история короткая
 
 ```
 START → query (LLM решает: вызвать retrieve_docs)
       → retrieve (ToolNode выполняет поиск)
       → grade_documents → "answer"
-      → answer (LLM генерирует ответ по документам)
-      → summarizer (should_summarize: история < 10)
-      → END
+      → answer
+      → should_summarize (история ≤ 10) → END
 ```
 
-### Сценарий 3: Поиск с переформулировкой
+### Сценарий 3: Поиск с первой попытки, история длинная
+
+```
+START → query → retrieve → grade_documents → "answer"
+      → answer
+      → should_summarize (история > 10) → summarizer → END
+```
+
+### Сценарий 4: Поиск с переформулировкой
 
 ```
 START → query → retrieve → grade_documents → "rewriter"
       → rewriter (LLM переформулирует, rewrite_count = 1)
       → query → retrieve → grade_documents → "answer"
-      → answer → summarizer → END
-```
-
-### Сценарий 4: Длинный диалог (с суммаризацией)
-
-```
-... (после 10 сообщений) ...
-→ summarizer (should_summarize: история > 10)
-→ summarizer (суммаризация выполняется: история сжата до 4 + сводка)
-→ END
+      → answer → should_summarize → END (или summarizer → END)
 ```
 
 ### Состояние messages на каждом этапе

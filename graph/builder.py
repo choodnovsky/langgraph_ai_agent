@@ -9,23 +9,14 @@ from graph.state import GraphState
 def build_graph(use_checkpointer: bool = False):
     """Построить RAG граф с самокоррекцией.
 
-    Параметры:
-    - use_checkpointer=True  — для Streamlit, память через PostgreSQL
-    - use_checkpointer=False — для LangGraph Studio, Studio управляет памятью сам
-
     Структура графа:
-        START
-          ↓
-        query        (LLM: искать или ответить напрямую)
-          ├─→ summarizer    (прямой ответ → проверка нужна ли сводка)
-          └─→ retrieve
-               ↓
-             grader
-               ├─→ answer → summarizer
-               └─→ rewriter → query (новая попытка, макс 2)
-          summarizer
-               ├─→ END      (история короткая)
-               └─→ END      (история свёрнута в сводку)
+        START → query
+          ├─→ retrieve → grader
+          │     ├─→ answer → should_summarize → summarizer → END
+          │     │                             └─→ END
+          │     └─→ rewriter → query
+          └─→ should_summarize → summarizer → END
+                              └─→ END
     """
     from graph.nodes.query import generate_query_or_respond
     from graph.nodes.grader import grade_documents
@@ -44,12 +35,13 @@ def build_graph(use_checkpointer: bool = False):
 
     workflow.add_edge(START, "query")
 
+    # query: tool call → retrieve, прямой ответ → проверка суммаризации
     workflow.add_conditional_edges(
         "query",
         tools_condition,
         {
             "tools": "retrieve",
-            END: "summarizer",
+            END: END,
         },
     )
 
@@ -62,9 +54,18 @@ def build_graph(use_checkpointer: bool = False):
         }
     )
 
-    workflow.add_edge("answer", "summarizer")
+    # После answer — проверяем нужна ли суммаризация
+    workflow.add_conditional_edges(
+        "answer",
+        should_summarize,
+        {
+            "summarizer": "summarizer",
+            "__end__": END,
+        }
+    )
+
+    workflow.add_edge("summarizer", END)
     workflow.add_edge("rewriter", "query")
-    workflow.add_conditional_edges("summarizer", should_summarize)
 
     # ── Checkpointer ─────────────────────────────────────────────────────────
     if use_checkpointer:
@@ -85,5 +86,5 @@ def build_graph(use_checkpointer: bool = False):
     return workflow.compile()
 
 
-# Экспорт для LangGraph Studio (Studio управляет памятью сам через POSTGRES_URI)
+# Экспорт для LangGraph Studio
 graph = build_graph(use_checkpointer=False)

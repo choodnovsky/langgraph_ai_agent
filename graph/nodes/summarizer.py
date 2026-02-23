@@ -13,12 +13,13 @@ from langchain_core.messages import HumanMessage, RemoveMessage
 MESSAGES_TO_KEEP = 4
 
 # Порог для запуска суммаризации
-SUMMARIZE_AFTER = 10
+SUMMARIZE_AFTER = 50
 
 
 def should_summarize(state) -> Literal["summarizer", "__end__"]:
-    """Conditional edge: суммаризировать или завершить."""
+    """Conditional edge ДО summarizer: нужна ли суммаризация?"""
     if len(state["messages"]) > SUMMARIZE_AFTER:
+        print(f"[summarizer] Порог достигнут ({len(state['messages'])} сообщений) → суммаризируем")
         return "summarizer"
     return "__end__"
 
