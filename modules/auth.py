@@ -20,7 +20,7 @@ def require_auth() -> str:
     """Проверяет авторизацию. Показывает имя и кнопку выхода в сайдбаре."""
     if st.session_state.get("authentication_status") is not True:
         st.warning("Необходима авторизация")
-        st.page_link("app.py", label="Войти")
+        st.page_link("main.py", label="Войти")
         st.stop()
 
     authenticator = get_authenticator()

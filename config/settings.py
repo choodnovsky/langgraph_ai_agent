@@ -40,7 +40,6 @@ class Settings(BaseSettings):
 
     POSTGRES_URI: str
 
-    USER_CREDENTIALS: dict = {"admin": "password123"}
     COOKIE_PASSWORD: SecretStr
 
     model_config = SettingsConfigDict(
