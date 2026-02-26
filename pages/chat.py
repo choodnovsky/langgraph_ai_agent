@@ -39,14 +39,22 @@ config = {"configurable": {"thread_id": thread_id}}
 state = graph.get_state(config)
 history = state.values.get("messages", []) if state and state.values else []
 
+# Рендер истории — ищем пары (HumanMessage, AIMessage)
+last_human_content = None
 for msg in history:
     if isinstance(msg, HumanMessage):
+        last_human_content = msg.content
         with st.chat_message("user"):
             st.write(msg.content)
     elif isinstance(msg, AIMessage) and msg.content and not msg.tool_calls:
         with st.chat_message("assistant"):
             st.write(msg.content)
-            render_feedback(msg.id, thread_id)
+            render_feedback(
+                message_id=msg.id,
+                thread_id=thread_id,
+                question=last_human_content,
+                answer=msg.content,
+            )
 
 if prompt := st.chat_input("Введите сообщение..."):
     with st.chat_message("user"):
@@ -63,7 +71,12 @@ if prompt := st.chat_input("Введите сообщение..."):
 
         with st.chat_message("assistant"):
             st.write_stream(stream_text(ai_msg.content))
-            render_feedback(ai_msg.id, thread_id)
+            render_feedback(
+                message_id=ai_msg.id,
+                thread_id=thread_id,
+                question=prompt,
+                answer=ai_msg.content,
+            )
 
         st.rerun()
 
