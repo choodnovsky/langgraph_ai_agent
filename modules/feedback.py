@@ -6,7 +6,7 @@ from config.settings import settings
 
 def init_feedback_table():
     """Создаёт таблицу feedback если не существует."""
-    with psycopg.connect(settings.POSTGRES_URL) as conn:
+    with psycopg.connect(settings.POSTGRES_URI) as conn:
         conn.execute("""
             CREATE TABLE IF NOT EXISTS feedback (
                 id          SERIAL PRIMARY KEY,
@@ -21,7 +21,7 @@ def init_feedback_table():
 
 def save_feedback(thread_id: str, message_id: str, rating: int):
     """Сохраняет оценку. rating: 1 = лайк, -1 = дизлайк."""
-    with psycopg.connect(settings.POSTGRES_URL) as conn:
+    with psycopg.connect(settings.POSTGRES_URI) as conn:
         conn.execute(
             "INSERT INTO feedback (thread_id, message_id, rating) VALUES (%s, %s, %s)",
             (thread_id, message_id, rating),

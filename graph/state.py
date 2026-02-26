@@ -1,6 +1,8 @@
 # graph/state.py
 
 from langgraph.graph import MessagesState
+from typing import Optional
+
 
 
 class GraphState(MessagesState):
@@ -13,4 +15,5 @@ class GraphState(MessagesState):
     - rewrite_count: int — количество попыток переформулирования вопроса
     """
     rewrite_count: int = 0
-    summary: str = ""
+    summary: Optional[str]
+    human_approved: Optional[bool]
