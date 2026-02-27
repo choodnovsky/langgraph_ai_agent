@@ -18,44 +18,10 @@ from __future__ import annotations
 
 import numpy as np
 import psycopg
-from dataclasses import dataclass, field
 from typing import Optional
 
 from config.settings import settings
-
-
-# ── Структуры данных ─────────────────────────────────────────────────────────
-
-@dataclass
-class Question:
-    id: int
-    thread_id: str
-    message_id: str
-    question: str
-    answer: str
-    rating: int          # 1 = лайк, -1 = дизлайк
-    created_at: str
-
-
-@dataclass
-class ClusterStats:
-    cluster_id: int
-    label: str           # название темы от LLM
-    description: str     # описание темы от LLM
-    total: int = 0
-    likes: int = 0
-    dislikes: int = 0
-    like_rate: float = 0.0   # доля лайков 0..1
-    questions: list[Question] = field(default_factory=list)
-
-    @property
-    def health(self) -> str:
-        """Визуальный индикатор здоровья кластера."""
-        if self.dislikes == 0:
-            return "✅ Отлично"
-        if self.like_rate >= 0.9:
-            return "🟡 Зона риска"
-        return "🔴 Проблема"
+from models.schemas import Question, ClusterStats
 
 
 # ── Загрузка данных из PostgreSQL ────────────────────────────────────────────
@@ -224,10 +190,11 @@ def get_question_clusters(
             sample = [q.question for q in c.questions]
             c.label, c.description = label_cluster_with_llm(sample)
 
-    # Сортируем: сначала кластеры с дизлайками, потом по размеру
+    # Сортируем по alert_score — проблемные и аномалии сверху
     return sorted(
         clusters.values(),
-        key=lambda c: (c.like_rate, -c.total),
+        key=lambda c: c.alert_score,
+        reverse=True,
     )
 
 

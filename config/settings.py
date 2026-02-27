@@ -1,4 +1,4 @@
-# src/settings.py
+# config/settings.py
 
 from pathlib import Path
 from pydantic import SecretStr

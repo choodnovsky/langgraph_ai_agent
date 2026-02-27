@@ -32,7 +32,6 @@
 
 ![RAG Agent Graph](img/schema_graph.png)
 
-
 ### Стек технологий
 
 | Слой | Технология |
@@ -42,6 +41,7 @@
 | Векторная БД | ChromaDB |
 | Эмбеддинги | HuggingFace `intfloat/multilingual-e5-base` |
 | Долгосрочная память | PostgreSQL (LangGraph Checkpointer) |
+| Фидбек | PostgreSQL (таблица `feedback`) |
 | UI | Streamlit |
 | Авторизация | streamlit-authenticator |
 
@@ -61,7 +61,6 @@ def grade_documents(state) -> Literal["answer", "rewriter"]:
     if rewrite_count >= 2:
         return "answer"  # лимит исчерпан — отвечаем как есть
 
-    # LLM оценивает: документ содержит ответ?
     response = grader_model.invoke(prompt)
 
     if "yes" in response.content.lower():
@@ -82,7 +81,6 @@ checkpointer.setup()
 
 graph = workflow.compile(checkpointer=checkpointer)
 
-# При каждом вызове — история восстанавливается по thread_id
 graph.invoke(
     {"messages": [HumanMessage(content=question)]},
     config={"configurable": {"thread_id": "victor"}}
@@ -98,15 +96,12 @@ graph.invoke(
 def summarize_conversation(state):
     summary = state.get("summary", "")
 
-    # Дополняем существующую сводку или создаём новую
     if summary:
         prompt = f"Текущая сводка: {summary}\n\nДополни с учётом новых сообщений:"
     else:
         prompt = "Создай краткую сводку разговора:"
 
     response = model.invoke(state["messages"] + [HumanMessage(content=prompt)])
-
-    # Удаляем старые сообщения, оставляем 4 последних
     delete = [RemoveMessage(id=m.id) for m in state["messages"][:-4]]
 
     return {"summary": response.content, "messages": delete}
@@ -123,9 +118,39 @@ for filepath_str, filepath in current_files.items():
     saved_hash   = state.get(filepath_str)
 
     if current_hash != saved_hash:
-        delete_file_chunks(collection, filepath_str)  # удаляем старые чанки
-        upsert_file(collection, embeddings_model, filepath)  # загружаем новые
+        delete_file_chunks(collection, filepath_str)
+        upsert_file(collection, embeddings_model, filepath)
         state[filepath_str] = current_hash
+```
+
+### 5. Система фидбека
+
+Под каждым ответом агента пользователь может поставить 👍 или 👎. Оценка сохраняется в PostgreSQL вместе с оригинальными текстами вопроса и ответа — для последующей аналитики и дообучения.
+
+```python
+# modules/feedback.py
+def save_feedback(thread_id, message_id, rating, question, answer):
+    # rating: 1 = лайк, -1 = дизлайк
+    # question/answer — оригинальные тексты без лемматизации
+    conn.execute(
+        "INSERT INTO feedback (thread_id, message_id, rating, question, answer) VALUES (%s, %s, %s, %s, %s)",
+        (thread_id, message_id, rating, question, answer),
+    )
+```
+
+### 6. Аналитика качества
+
+На основе накопленных фидбеков работает модуль кластеризации. Все вопросы векторизуются той же моделью что используется в индексаторе, кластеризуются через KMeans, а рейтинг используется как сигнал качества внутри каждого кластера. LLM автоматически даёт название каждой теме.
+
+```python
+# analytics/cluster_questions.py
+clusters = get_question_clusters(min_questions=10, max_k=8)
+
+# Каждый кластер имеет health-индикатор:
+# ✅ Отлично   — дизлайков нет
+# 🟠 Аномалия  — 90%+ лайков, но дизлайк вдруг появился
+# 🟡 Зона риска — 60–90% лайков
+# 🔴 Проблема  — ниже 60% лайков
 ```
 
 ---
@@ -150,7 +175,13 @@ project/
 │       └── summarizer.py       # суммаризация истории
 │
 ├── analytics/
-│   └── cluster_questions.py    # кластеризатор вопросов и ответов
+│   └── cluster_questions.py    # кластеризация вопросов с рейтингом как сигналом
+│
+├── models/
+│   └── schemas.py              # доменные модели: Question, ClusterStats
+│
+├── modules/
+│   └── feedback.py             # сохранение и рендер фидбека
 │
 ├── pages/
 │   └── chat.py                 # UI страницы чата
@@ -175,13 +206,11 @@ pip install -r requirements.txt
 
 ### Инфраструктура
 ```bash
-# ChromaDB
 docker compose up -d
 ```
 
 ### Индексация документов
 ```bash
-# Положи .txt файлы в wiki/ и запусти
 python services/indexer.py
 
 # Cron — автообновление каждые 10 минут
@@ -197,6 +226,7 @@ langgraph dev
 ```bash
 streamlit run app.py
 ```
+
 ---
 
 ## Переменные окружения
@@ -229,13 +259,6 @@ CHUNK_OVERLAP=150
 
 - **Telegram авторизация** — вход через Telegram вместо логин/пароль
 - **Мультимодальность** — поддержка PDF и изображений в базе знаний
-- **Механизм смены модели** - возможность переключения моделей в зависимости от задач
-- **Очистка чата и создание нового чата** - в пределах пользователя
-- **Аналитика** — Имея три поля question, answer, rating, можно развернуть довольно богатую аналитику:  
-    * Качество по времени. Процент дизлайков по дням/неделям — анализировать деградацию после обновления модели, индекса или промпта. 
-    * Кластеризация плохих вопросов. Векторизуем все дизлайкнутые вопросы через ChromaDB, кластеризуем и получаешь темы где модель стабильно проваливается. Например "вопросы про даты" или "вопросы с отрицанием". 
-    * Сравнение ответов на похожие вопросы. Находим семантически близкие вопросы с разным рейтингом — анализируем чем отличаются ответы. Это даёт понимание что именно в формулировке ответа работает. 
-    * Длина vs качество. Коррелируем длину ответа с рейтингом — часто есть паттерн: слишком короткие или слишком длинные ответы получают дизлайки. 
-    * Выявление галлюцинаций. Дизлайкнутые ответы можно прогнать через LLM с промптом "найди фактические ошибки" — получаешь автоматический детектор галлюцинаций на реальных данных. 
-    * Топ лучших ответов. Залайканные пары вопрос→ответ — это готовый датасет few-shot примеров, можно добавлять их в системный промпт динамически. 
-    * Всё это будет размещено в том же приложении на странице Analytics — графики через st.line_chart, таблицы провальных тем, топ хороших ответов.
+- **Механизм смены модели** — возможность переключения моделей в зависимости от задач
+- **Очистка чата и создание нового чата** — в пределах пользователя
+- **Страница аналитики** — дашборд в Streamlit с кластерами вопросов, графиком качества по времени, топом лучших ответов и детектором галлюцинаций
