@@ -1,7 +1,26 @@
-# src/components/rewriter.py
+# graph/nodes/rewriter.py
+
+import logging
+from pathlib import Path
 
 from langchain_core.messages import HumanMessage
 from langgraph.graph import MessagesState
+
+# ---------------------------------------------------------------------------
+_LOG_PATH = Path(__file__).resolve().parents[2] / "logs" / "debug.log"
+_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+
+logger = logging.getLogger("rewriter")
+if not logger.handlers:
+    logger.setLevel(logging.DEBUG)
+    _fmt = logging.Formatter("%(asctime)s [%(name)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+    _fh = logging.FileHandler(_LOG_PATH, encoding="utf-8")
+    _fh.setFormatter(_fmt)
+    logger.addHandler(_fh)
+    _ch = logging.StreamHandler()
+    _ch.setFormatter(_fmt)
+    logger.addHandler(_ch)
+# ---------------------------------------------------------------------------
 
 REWRITE_PROMPT = (
     "Посмотри на входные данные и попытайся проанализировать базовое семантическое намерение / значение.\n"
@@ -17,42 +36,30 @@ REWRITE_PROMPT = (
 
 
 def rewrite_question(state: MessagesState):
-    """Переформулировать исходный вопрос пользователя для улучшения поиска.
-
-    Этот узел вызывается когда найденные документы нерелевантны.
-    Увеличивает счетчик попыток переформулирования.
-    """
-    # Импортируем модель только когда нужна
+    """Переформулировать вопрос для улучшения поиска."""
     from graph.nodes.query import get_response_model
 
     messages = state["messages"]
 
-    # ВАЖНО: Берем ПОСЛЕДНИЙ вопрос пользователя (не первый!)
     human_messages = [m for m in messages if isinstance(m, HumanMessage)]
     if not human_messages:
-        print("Error: No HumanMessage found")
+        logger.debug("[rewriter] HumanMessage не найден")
         question = "Unknown question"
     else:
-        question = human_messages[-1].content  # Последний вопрос
+        question = human_messages[-1].content
 
-    # Увеличиваем счетчик попыток
     rewrite_count = state.get("rewrite_count", 0) + 1
 
+    logger.debug(f"[rewriter] попытка №{rewrite_count}, переформулируем: {question[:60]}")
 
-    # Генерируем переформулированный вопрос
     prompt = REWRITE_PROMPT.format(question=question)
-
-    # Получаем модель (инициализируется только при первом вызове)
     response_model = get_response_model()
     response = response_model.invoke([{"role": "user", "content": prompt}])
 
-    rewritten_question = response.content
+    rewritten = response.content
+    logger.debug(f"[rewriter] новый вопрос: {rewritten[:80]}")
 
-    # Возвращаем обновленный state:
-    # - Заменяем первое сообщение на переформулированный вопрос
-    # - Очищаем все промежуточные сообщения (tool calls, tool messages)
-    # - Сохраняем счетчик попыток
     return {
-        "messages": [HumanMessage(content=rewritten_question)],
-        "rewrite_count": rewrite_count
+        "messages": [HumanMessage(content=rewritten)],
+        "rewrite_count": rewrite_count,
     }

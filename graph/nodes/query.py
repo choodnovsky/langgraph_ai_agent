@@ -1,10 +1,35 @@
 # graph/nodes/query.py
 # Версия с few-shot примерами для лучшего роутинга
 
+import logging
 from functools import lru_cache
+from pathlib import Path
+
 from langchain.chat_models import init_chat_model
 from langchain_core.messages import SystemMessage
 from langgraph.graph import MessagesState
+
+# ---------------------------------------------------------------------------
+# Тот же лог-файл что и в grader.py — logs/debug.log в корне проекта
+# ---------------------------------------------------------------------------
+_LOG_PATH = Path(__file__).resolve().parents[2] / "logs" / "debug.log"
+_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+
+logger = logging.getLogger("generate_query")
+if not logger.handlers:
+    logger.setLevel(logging.DEBUG)
+
+    _fmt = logging.Formatter("%(asctime)s [%(name)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+
+    _fh = logging.FileHandler(_LOG_PATH, encoding="utf-8")
+    _fh.setFormatter(_fmt)
+    logger.addHandler(_fh)
+
+    _ch = logging.StreamHandler()
+    _ch.setFormatter(_fmt)
+    logger.addHandler(_ch)
+
+# ---------------------------------------------------------------------------
 
 SYSTEM_PROMPT_WITH_EXAMPLES = """Ты — умный ассистент с доступом к базе знаний через инструмент поиска документов.
 
@@ -60,12 +85,10 @@ def generate_query_or_respond(state: MessagesState):
     В зависимости от вопроса, модель примет решение:
     извлечь информацию с помощью инструмента поиска или просто ответить пользователю.
     """
-    # Импортируем инструмент только когда он нужен
     from graph.nodes.retriever import retriever_tool
 
     messages = [SystemMessage(content=SYSTEM_PROMPT_WITH_EXAMPLES)] + state["messages"]
 
-    # Получаем модель (инициализируется только при первом вызове)
     response_model = get_response_model()
 
     response = (
@@ -74,10 +97,13 @@ def generate_query_or_respond(state: MessagesState):
         .invoke(messages)
     )
 
-    # DEBUG: Показываем что модель решила делать
-    print(f"\n[DEBUG generate_query] Модель вызвала tool: {response.tool_calls if hasattr(response, 'tool_calls') and response.tool_calls else 'НЕТ'}")
-    if hasattr(response, 'tool_calls') and response.tool_calls:
-        for tool_call in response.tool_calls:
-            print(f"[DEBUG generate_query] Tool: {tool_call['name']}, Args: {tool_call['args']}")
+    tool_calls = response.tool_calls if hasattr(response, "tool_calls") and response.tool_calls else None
+
+    if tool_calls:
+        logger.debug(f"[generate_query] Модель вызвала tool: {tool_calls}")
+        for tc in tool_calls:
+            logger.debug(f"[generate_query] Tool: {tc['name']}, Args: {tc['args']}")
+    else:
+        logger.debug("[generate_query] Tool не вызван — модель отвечает напрямую")
 
     return {"messages": [response]}

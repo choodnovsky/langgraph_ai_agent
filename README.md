@@ -89,7 +89,7 @@ graph.invoke(
 
 ### 3. Суммаризация истории
 
-Когда сообщений становится больше 10 — агент сворачивает историю в краткую сводку. Модель видит сводку + последние 4 сообщения вместо всей истории. Токены не растут бесконечно.
+Когда сообщений становится больше 50 — агент сворачивает историю в краткую сводку. Модель видит сводку + последние 4 сообщения вместо всей истории. Токены не растут бесконечно.
 
 ```python
 # graph/nodes/summarizer.py
@@ -153,46 +153,68 @@ clusters = get_question_clusters(min_questions=10, max_k=8)
 # 🔴 Проблема  — ниже 60% лайков
 ```
 
+### 7. Единое логирование
+
+Все ключевые узлы графа (`query.py`, `grader.py`) пишут debug-вывод одновременно в консоль и в файл `logs/debug.log`. Логгеры изолированы по имени модуля, но пишут в один файл — удобно для трассировки полного цикла запроса.
+
+```
+2026-02-28 13:54:01 [generate_query] [generate_query] Модель вызвала tool: [{'name': 'retrieve_docs', 'args': {'query': 'корпоративные данные хранение серверы'}, ...}]
+2026-02-28 13:54:01 [generate_query] [generate_query] Tool: retrieve_docs, Args: {'query': 'корпоративные данные хранение серверы'}
+2026-02-28 13:54:01 [grader] [grade] попытка=0, вопрос: где хранятся корпоративные данные?
+2026-02-28 13:54:13 [grader] [grade] ответ модели: 'yes'
+2026-02-28 13:54:13 [grader] [grade] релевантен → generate_answer
+```
+
+Папка `logs/` создаётся автоматически при первом запуске. Паттерн логгера одинаков во всех узлах:
+
+```python
+_LOG_PATH = Path(__file__).resolve().parents[2] / "logs" / "debug.log"
+logger = logging.getLogger("имя_модуля")
+```
+
 ---
 
 ## Структура проекта
 
 ```
 project/
-├── app.py                      # точка входа: авторизация + меню
-├── langgraph.json              # конфиг LangGraph Studio
-├── streamlit_credentials.yaml  # логины пользователей
+├── main.py                      # точка входа: авторизация + меню
+├── langgraph.json               # конфиг LangGraph Studio
+├── streamlit_credentials.yaml   # логины пользователей
+│
+├── logs/
+│   └── debug.log                # единый лог всех узлов графа (авто)
 │
 ├── graph/
-│   ├── builder.py              # сборка графа
-│   ├── state.py                # GraphState (messages, rewrite_count, summary)
+│   ├── builder.py               # сборка графа
+│   ├── state.py                 # GraphState (messages, rewrite_count, summary)
 │   └── nodes/
-│       ├── query.py            # роутинг: искать или ответить напрямую
-│       ├── retriever.py        # поиск в ChromaDB
-│       ├── grader.py           # оценка релевантности
-│       ├── answer.py           # генерация ответа
-│       ├── rewriter.py         # переформулирование вопроса
-│       └── summarizer.py       # суммаризация истории
+│       ├── query.py             # роутинг: искать или ответить напрямую
+│       ├── retriever.py         # поиск в ChromaDB
+│       ├── grader.py            # оценка релевантности
+│       ├── answer.py            # генерация ответа
+│       ├── rewriter.py          # переформулирование вопроса
+│       └── summarizer.py        # суммаризация истории
 │
 ├── analytics/
-│   └── cluster_questions.py    # кластеризация вопросов с рейтингом как сигналом
+│   └── cluster_questions.py     # кластеризация вопросов с рейтингом как сигналом
 │
 ├── models/
-│   └── schemas.py              # доменные модели: Question, ClusterStats
+│   └── schemas.py               # доменные модели: Question, ClusterStats
 │
 ├── modules/
-│   └── feedback.py             # сохранение и рендер фидбека
+│   └── feedback.py              # сохранение и рендер фидбека
 │
 ├── pages/
-│   └── chat.py                 # UI страницы чата
+│   └── chat.py                  # UI страницы чата
 │
 ├── config/
-│   └── settings.py             # все настройки из .env
+│   └── settings.py              # все настройки из .env
 │
 └── services/
-    ├── indexer.py              # индексация wiki/ → ChromaDB
-    ├── clear_collection.py     # сброс коллекции
-    └── index_state.json        # MD5-хэши файлов (авто)
+    ├── indexer.py               # индексация wiki/ → ChromaDB
+    ├── clear_collection.py      # сброс коллекции
+    └── index_state.json         # MD5-хэши файлов (авто)
 ```
 
 ---
@@ -224,7 +246,7 @@ langgraph dev
 
 ### Streamlit
 ```bash
-streamlit run app.py
+streamlit run main.py
 ```
 
 ---

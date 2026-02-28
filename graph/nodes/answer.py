@@ -1,7 +1,26 @@
 # graph/nodes/answer.py
 
+import logging
+from pathlib import Path
+
 from langgraph.graph import MessagesState
 from langchain_core.messages import ToolMessage
+
+# ---------------------------------------------------------------------------
+_LOG_PATH = Path(__file__).resolve().parents[2] / "logs" / "debug.log"
+_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+
+logger = logging.getLogger("answer")
+if not logger.handlers:
+    logger.setLevel(logging.DEBUG)
+    _fmt = logging.Formatter("%(asctime)s [%(name)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+    _fh = logging.FileHandler(_LOG_PATH, encoding="utf-8")
+    _fh.setFormatter(_fmt)
+    logger.addHandler(_fh)
+    _ch = logging.StreamHandler()
+    _ch.setFormatter(_fmt)
+    logger.addHandler(_ch)
+# ---------------------------------------------------------------------------
 
 GENERATE_PROMPT = (
     "Ты — помощник по ответам на вопросы на основе предоставленных документов. "
@@ -22,41 +41,32 @@ GENERATE_PROMPT = (
 
 
 def generate_answer(state: MessagesState):
-    """Сгенерировать ответ на основе найденных документов.
-
-    Ожидаемая структура state["messages"]:
-    - Последний HumanMessage: текущий вопрос пользователя
-    - Последний ToolMessage: результаты поиска
-    """
-    # Импортируем модель только когда нужна
+    """Сгенерировать ответ на основе найденных документов."""
     from graph.nodes.query import get_response_model
     from langchain_core.messages import HumanMessage
 
     messages = state["messages"]
 
-    # ВАЖНО: Берем ПОСЛЕДНИЙ вопрос пользователя (не первый!)
-    # В Streamlit может быть несколько вопросов в истории
     human_messages = [m for m in messages if isinstance(m, HumanMessage)]
     if not human_messages:
-        print("Error: No HumanMessage found in state")
+        logger.debug("[answer] HumanMessage не найден — используем заглушку")
         question = "Unknown question"
     else:
-        question = human_messages[-1].content  # Последний вопрос
+        question = human_messages[-1].content
 
-    # Находим последнее ToolMessage с результатами поиска
     tool_messages = [m for m in messages if isinstance(m, ToolMessage)]
-
     if not tool_messages:
-        # Резервный вариант: если нет ToolMessage, используем последнее сообщение
+        logger.debug("[answer] ToolMessage не найден — контекст пустой")
         context = messages[-1].content if messages else ""
     else:
         context = tool_messages[-1].content
 
-    # Генерируем ответ
-    prompt = GENERATE_PROMPT.format(question=question, context=context)
+    logger.debug(f"[answer] генерируем ответ на: {question[:60]}")
 
-    # Получаем модель (инициализируется только при первом вызове)
+    prompt = GENERATE_PROMPT.format(question=question, context=context)
     response_model = get_response_model()
     response = response_model.invoke([{"role": "user", "content": prompt}])
+
+    logger.debug(f"[answer] ответ сгенерирован ({len(response.content)} симв.)")
 
     return {"messages": [response]}

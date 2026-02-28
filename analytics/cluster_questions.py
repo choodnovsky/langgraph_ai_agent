@@ -36,8 +36,7 @@ def load_all_questions(min_count: int = 5) -> list[Question]:
             """
             SELECT id, thread_id, message_id, question, answer, rating, created_at
             FROM feedback
-            WHERE question IS NOT NULL
-              AND question != ''
+            WHERE question IS NOT NULL AND question != ''
             ORDER BY created_at DESC
             """,
         ).fetchall()
